@@ -3,3 +3,6 @@
 
 #include "MalogicCharacter.h"
 
+AMalogicCharacter::AMalogicCharacter(const FObjectInitializer& ObjectInitializer)
+{
+}

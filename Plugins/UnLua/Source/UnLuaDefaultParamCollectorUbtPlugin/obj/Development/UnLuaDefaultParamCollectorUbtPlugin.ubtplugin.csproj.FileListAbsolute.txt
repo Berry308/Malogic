@@ -21,3 +21,4 @@ E:\Unreal Projects\Malogic\Plugins\UnLua\Source\UnLuaDefaultParamCollectorUbtPlu
 E:\Unreal Projects\Malogic\Plugins\UnLua\Source\UnLuaDefaultParamCollectorUbtPlugin\obj\Development\UnLuaDefaultParamCollectorUbtPlugin.dll
 E:\Unreal Projects\Malogic\Plugins\UnLua\Source\UnLuaDefaultParamCollectorUbtPlugin\obj\Development\refint\UnLuaDefaultParamCollectorUbtPlugin.dll
 E:\Unreal Projects\Malogic\Plugins\UnLua\Source\UnLuaDefaultParamCollectorUbtPlugin\obj\Development\UnLuaDefaultParamCollectorUbtPlugin.pdb
+E:\Unreal Projects\Malogic\Plugins\UnLua\Source\UnLuaDefaultParamCollectorUbtPlugin\obj\Development\UnLuaDefaultParamCollectorUbtPlugin.ubtplugin.sourcelink.json

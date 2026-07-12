@@ -13,9 +13,13 @@ public class Malogic : ModuleRules
 			"CoreUObject", 
 			"Engine", 
 			"GameplayTags",
-			"InputCore", 
+            "GameplayTasks",
+            "GameplayAbilities",
+            "InputCore", 
+			"Lua",
 			"ModularGameplay",
 			"ModularGameplayActors",
+			"NetCore",
             "EnhancedInput" 
 		});
 

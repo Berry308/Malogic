@@ -116,7 +116,7 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 		// This is where we actually bind and input action to a gameplay tag, which means that Gameplay Ability Blueprints will
 		// be triggered directly by these input actions Triggered events. 
 		TArray<uint32> BindHandles;
-		InputComp->BindAbilityActions(DefaultInputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
+		//InputComp->BindAbilityActions(DefaultInputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
 
 		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, /*bLogIfNotFound=*/ false);
 		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Input_LookMouse, /*bLogIfNotFound=*/ false);
@@ -156,7 +156,7 @@ void UMalogicHeroComponent::AddAdditionalInputConfig(const UMalogicInputConfig* 
 	UMalogicInputComponent* InputComp = Pawn->FindComponentByClass<UMalogicInputComponent>();
 	if (ensureMsgf(InputComp, TEXT("Unexpected Input Component class! The Gameplay Abilities will not be bound to their inputs. Change the input component to UMRInputComponent or a subclass of it.")))
 	{
-		InputComp->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
+		//InputComp->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
 	}
 }
 
@@ -174,7 +174,7 @@ bool UMalogicHeroComponent::IsReadyToBindInputs() const
 //{
 //	if (const APawn* Pawn = GetPawn<APawn>())
 //	{
-//		if (UMRAbilitySystemComponent* MRASC = PawnExtComp->GetMRAbilitySystemComponent())
+//		if (UMalogicAbilitySystemComponent* MRASC = PawnExtComp->GetMalogicAbilitySystemComponent())
 //		{
 //			MRASC->AbilityInputTagPressed(InputTag);
 //		}
@@ -191,7 +191,7 @@ bool UMalogicHeroComponent::IsReadyToBindInputs() const
 //
 //	if (const UMRPawnExtensionComponent* PawnExtComp = UMRPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
 //	{
-//		if (UMRAbilitySystemComponent* MRASC = PawnExtComp->GetMRAbilitySystemComponent())
+//		if (UMalogicAbilitySystemComponent* MRASC = PawnExtComp->GetMalogicAbilitySystemComponent())
 //		{
 //			MRASC->AbilityInputTagReleased(InputTag);
 //		}
@@ -204,7 +204,7 @@ void UMalogicHeroComponent::Input_Move(const FInputActionValue& InputActionValue
 	AController* Controller = Pawn ? Pawn->GetController() : nullptr;
 
 	// If the player has attempted to move again then cancel auto running
-	/*if (AMRPlayerController* MRController = Cast<AMRPlayerController>(Controller))
+	/*if (AMalogicPlayerController* MRController = Cast<AMalogicPlayerController>(Controller))
 	{
 		MRController->SetIsAutoRunning(false);
 	}*/
