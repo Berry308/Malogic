@@ -8,8 +8,10 @@
 #include "UserSettings/EnhancedInputUserSettings.h"
 #include "InputMappingContext.h"
 
-//#include "AbilitySystem/MRAbilitySystemComponent.h"
+#include "AbilitySystem/MalogicAbilitySystemComponent.h"
 #include "Character/MalogicCharacter.h"
+#include "Character/MalogicPawnData.h"
+#include "Character/MalogicPawnExtensionComponent.h"
 #include "Player/MalogicPlayerController.h"
 #include "Player/MalogicPlayerState.h"
 #include "Player/MalogicLocalPlayer.h"
@@ -18,7 +20,7 @@
 #include "MalogicGameplayTags.h"
 
 
-namespace MRHero
+namespace MalogicHero
 {
 	static const float LookYawRate = 300.0f;
 	static const float LookPitchRate = 165.0f;
@@ -44,21 +46,55 @@ void UMalogicHeroComponent::OnRegister()
 	}
 	else
 	{
-		// Register with the init state system early, this will only work if this is a game world
-		//RegisterInitStateFeature();
+		if (UMalogicPawnExtensionComponent* PawnExtension = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(GetOwner()))
+		{
+			const FSimpleMulticastDelegate::FDelegate InitializeHeroDelegate = FSimpleMulticastDelegate::FDelegate::CreateUObject(this, &ThisClass::TryInitializeHero);
+			PawnExtension->OnAbilitySystemInitialized_RegisterAndCall(InitializeHeroDelegate);
+			PawnExtension->OnPawnDataInitialized_RegisterAndCall(InitializeHeroDelegate);
+			PawnExtension->OnPawnInputComponentReady_RegisterAndCall(InitializeHeroDelegate);
+		}
 	}
 }
 
 void UMalogicHeroComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	InitializePlayerInput(GetPawn<APawn>()->InputComponent);
+
+	TryInitializeHero();
 }
 
 void UMalogicHeroComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void UMalogicHeroComponent::TryInitializeHero()
+{
+	if (bReadyToBindInputs)
+	{
+		return;
+	}
+
+	APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn || !Pawn->IsLocallyControlled() || !Pawn->InputComponent)
+	{
+		return;
+	}
+
+	const APlayerController* PlayerController = GetController<APlayerController>();
+	if (!PlayerController || !PlayerController->IsLocalController())
+	{
+		return;
+	}
+
+	const UMalogicPawnExtensionComponent* PawnExtension = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn);
+	if (!PawnExtension || !PawnExtension->GetPawnData() || !PawnExtension->GetMalogicAbilitySystemComponent())
+	{
+		return;
+	}
+
+	InitializePlayerInput(Pawn->InputComponent);
 }
 
 //添加默认输入映射上下文
@@ -73,6 +109,13 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 		return;
 	}
 
+	const UMalogicPawnExtensionComponent* PawnExtension = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn);
+	const UMalogicPawnData* PawnData = PawnExtension ? PawnExtension->GetPawnData() : nullptr;
+	if (!PawnData)
+	{
+		return;
+	}
+
 	const APlayerController* PC = GetController<APlayerController>();
 	check(PC);
 
@@ -81,6 +124,13 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 
 	UEnhancedInputLocalPlayerSubsystem* Subsystem = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>();
 	check(Subsystem);
+
+	const UMalogicInputConfig* InputConfig = PawnData->InputConfig ? PawnData->InputConfig.Get() : DefaultInputConfig;
+	if (!InputConfig)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("PawnData [%s] has no InputConfig and HeroComponent [%s] has no default input config."), *GetNameSafe(PawnData), *GetNameSafe(this));
+		return;
+	}
 
 	Subsystem->ClearAllMappings();
 
@@ -106,24 +156,25 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 
 	// The Lyra Input Component has some additional functions to map Gameplay Tags to an Input Action.
 	// If you want this functionality but still want to change your input component class, make it a subclass
-	// of the UMRInputComponent or modify this component accordingly.
+	// of the UMalogicInputComponent or modify this component accordingly.
 	UMalogicInputComponent* InputComp = Cast<UMalogicInputComponent>(PlayerInputComponent);
-	if (ensureMsgf(InputComp, TEXT("Unexpected Input Component class! The Gameplay Abilities will not be bound to their inputs. Change the input component to UMRInputComponent or a subclass of it.")))
+	if (!ensureMsgf(InputComp, TEXT("Unexpected Input Component class! The Gameplay Abilities will not be bound to their inputs. Change the input component to UMalogicInputComponent or a subclass of it.")))
 	{
-		// Add the key mappings that may have been set by the player
-		InputComp->AddInputMappings(DefaultInputConfig, Subsystem);
-
-		// This is where we actually bind and input action to a gameplay tag, which means that Gameplay Ability Blueprints will
-		// be triggered directly by these input actions Triggered events. 
-		TArray<uint32> BindHandles;
-		//InputComp->BindAbilityActions(DefaultInputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
-
-		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, /*bLogIfNotFound=*/ false);
-		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Input_LookMouse, /*bLogIfNotFound=*/ false);
-		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Look_Stick, ETriggerEvent::Triggered, this, &ThisClass::Input_LookStick, /*bLogIfNotFound=*/ false);
-		InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_Crouch, ETriggerEvent::Triggered, this, &ThisClass::Input_Crouch, /*bLogIfNotFound=*/ false);
-		//InputComp->BindNativeAction(DefaultInputConfig, MalogicGameplayTags::InputTag_AutoRun, ETriggerEvent::Triggered, this, &ThisClass::Input_AutoRun, /*bLogIfNotFound=*/ false);
+		return;
 	}
+
+	// Add the key mappings that may have been set by the player
+	InputComp->AddInputMappings(InputConfig, Subsystem);
+
+	// This is where we actually bind and input action to a gameplay tag, which means that Gameplay Ability Blueprints will
+	// be triggered directly by these input actions Triggered events.
+	TArray<uint32> BindHandles;
+	InputComp->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
+
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Move, ETriggerEvent::Triggered, this, &ThisClass::Input_Move, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Input_LookMouse, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Look_Stick, ETriggerEvent::Triggered, this, &ThisClass::Input_LookStick, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Crouch, ETriggerEvent::Triggered, this, &ThisClass::Input_Crouch, /*bLogIfNotFound=*/ false);
 
 
 	if (ensure(!bReadyToBindInputs))
@@ -154,9 +205,9 @@ void UMalogicHeroComponent::AddAdditionalInputConfig(const UMalogicInputConfig* 
 	check(Subsystem);
 
 	UMalogicInputComponent* InputComp = Pawn->FindComponentByClass<UMalogicInputComponent>();
-	if (ensureMsgf(InputComp, TEXT("Unexpected Input Component class! The Gameplay Abilities will not be bound to their inputs. Change the input component to UMRInputComponent or a subclass of it.")))
+	if (ensureMsgf(InputComp, TEXT("Unexpected Input Component class! The Gameplay Abilities will not be bound to their inputs. Change the input component to UMalogicInputComponent or a subclass of it.")))
 	{
-		//InputComp->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
+		InputComp->BindAbilityActions(InputConfig, this, &ThisClass::Input_AbilityInputTagPressed, &ThisClass::Input_AbilityInputTagReleased, /*out*/ BindHandles);
 	}
 }
 
@@ -170,33 +221,36 @@ bool UMalogicHeroComponent::IsReadyToBindInputs() const
 	return bReadyToBindInputs;
 }
 
-//void UMalogicHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
-//{
-//	if (const APawn* Pawn = GetPawn<APawn>())
-//	{
-//		if (UMalogicAbilitySystemComponent* MRASC = PawnExtComp->GetMalogicAbilitySystemComponent())
-//		{
-//			MRASC->AbilityInputTagPressed(InputTag);
-//		}
-//	}
-//}
+void UMalogicHeroComponent::Input_AbilityInputTagPressed(FGameplayTag InputTag)
+{
+	if (const APawn* Pawn = GetPawn<APawn>())
+	{
+		if (const UMalogicPawnExtensionComponent* PawnExtComp = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+		{
+			if (UMalogicAbilitySystemComponent* MalogicASC = PawnExtComp->GetMalogicAbilitySystemComponent())
+			{
+				MalogicASC->AbilityInputTagPressed(InputTag);
+			}
+		}
+	}
+}
 
-//void UMalogicHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag)
-//{
-//	const APawn* Pawn = GetPawn<APawn>();
-//	if (!Pawn)
-//	{
-//		return;
-//	}
-//
-//	if (const UMRPawnExtensionComponent* PawnExtComp = UMRPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
-//	{
-//		if (UMalogicAbilitySystemComponent* MRASC = PawnExtComp->GetMalogicAbilitySystemComponent())
-//		{
-//			MRASC->AbilityInputTagReleased(InputTag);
-//		}
-//	}
-//}
+void UMalogicHeroComponent::Input_AbilityInputTagReleased(FGameplayTag InputTag)
+{
+	const APawn* Pawn = GetPawn<APawn>();
+	if (!Pawn)
+	{
+		return;
+	}
+
+	if (const UMalogicPawnExtensionComponent* PawnExtComp = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+	{
+		if (UMalogicAbilitySystemComponent* MalogicASC = PawnExtComp->GetMalogicAbilitySystemComponent())
+		{
+			MalogicASC->AbilityInputTagReleased(InputTag);
+		}
+	}
+}
 
 void UMalogicHeroComponent::Input_Move(const FInputActionValue& InputActionValue)
 {
@@ -204,10 +258,6 @@ void UMalogicHeroComponent::Input_Move(const FInputActionValue& InputActionValue
 	AController* Controller = Pawn ? Pawn->GetController() : nullptr;
 
 	// If the player has attempted to move again then cancel auto running
-	/*if (AMalogicPlayerController* MRController = Cast<AMalogicPlayerController>(Controller))
-	{
-		MRController->SetIsAutoRunning(false);
-	}*/
 
 	if (Controller)
 	{
@@ -266,12 +316,12 @@ void UMalogicHeroComponent::Input_LookStick(const FInputActionValue& InputAction
 
 	if (Value.X != 0.0f)
 	{
-		Pawn->AddControllerYawInput(Value.X * MRHero::LookYawRate * World->GetDeltaSeconds());
+		Pawn->AddControllerYawInput(Value.X * MalogicHero::LookYawRate * World->GetDeltaSeconds());
 	}
 
 	if (Value.Y != 0.0f)
 	{
-		Pawn->AddControllerPitchInput(Value.Y * MRHero::LookPitchRate * World->GetDeltaSeconds());
+		Pawn->AddControllerPitchInput(Value.Y * MalogicHero::LookPitchRate * World->GetDeltaSeconds());
 	}
 }
 

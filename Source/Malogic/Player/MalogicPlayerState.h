@@ -13,6 +13,7 @@ class AMalogicController;
 class APlayerState;
 class UAbilitySystemComponent;
 class UMalogicAbilitySystemComponent;
+class UMalogicPawnData;
 struct FGameplayTag;
 
 /**
@@ -22,7 +23,8 @@ UCLASS()
 class MALOGIC_API AMalogicPlayerState : public AModularPlayerState, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
-	
+
+public:
 	AMalogicPlayerState(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 
 	UFUNCTION(BlueprintCallable, Category = "MazeRunner|PlayerState")
@@ -31,6 +33,12 @@ class MALOGIC_API AMalogicPlayerState : public AModularPlayerState, public IAbil
 	UFUNCTION(BlueprintCallable, Category = "MazeRunner|PlayerState")
 	UMalogicAbilitySystemComponent* GetMalogicAbilitySystemComponent() const { return AbilitySystemComponent; }
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+	template <class T>
+	const T* GetPawnData() const { return Cast<T>(PawnData); }
+
+	/** Sets the persistent PawnData and grants its ability sets on the server. */
+	void SetPawnData(const UMalogicPawnData* InPawnData);
 
 	//~AActor interface
 	virtual void PreInitializeComponents() override;
@@ -63,6 +71,12 @@ class MALOGIC_API AMalogicPlayerState : public AModularPlayerState, public IAbil
 	bool HasStatTag(FGameplayTag Tag) const;
 
 private:
+	UFUNCTION()
+	void OnRep_PawnData();
+
+	UPROPERTY(ReplicatedUsing = OnRep_PawnData)
+	TObjectPtr<const UMalogicPawnData> PawnData;
+
 	// The ability system component sub-object used by player characters.
 	UPROPERTY(VisibleAnywhere, Category = "MazeRunner|PlayerState")
 	TObjectPtr<UMalogicAbilitySystemComponent> AbilitySystemComponent;

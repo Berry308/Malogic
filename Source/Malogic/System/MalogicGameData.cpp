@@ -10,7 +10,7 @@ UMalogicGameData::UMalogicGameData()
 {
 }
 
-const UMalogicGameData& UMalogicGameData::UMalogicGameData::Get()
+const UMalogicGameData& UMalogicGameData::Get()
 {
 	return UMalogicAssetManager::Get().GetGameData();
 }

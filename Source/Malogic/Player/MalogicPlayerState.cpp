@@ -6,6 +6,9 @@
 #include "AbilitySystem/Attributes/MalogicHealthSet.h"
 #include "AbilitySystem/AbilitySet.h"
 #include "AbilitySystem/MalogicAbilitySystemComponent.h"
+#include "Character/MalogicPawnData.h"
+#include "Character/MalogicPawnExtensionComponent.h"
+#include "GameFramework/Pawn.h"
 #include "MalogicLogChannels.h"
 #include "MalogicPlayerController.h"
 #include "Net/UnrealNetwork.h"
@@ -65,6 +68,7 @@ void AMalogicPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, StatTags);
+	DOREPLIFETIME(ThisClass, PawnData);
 }
 
 AMalogicPlayerController* AMalogicPlayerState::GetMalogicPlayerController() const
@@ -75,6 +79,55 @@ AMalogicPlayerController* AMalogicPlayerState::GetMalogicPlayerController() cons
 UAbilitySystemComponent* AMalogicPlayerState::GetAbilitySystemComponent() const
 {
 	return GetMalogicAbilitySystemComponent();
+}
+
+void AMalogicPlayerState::SetPawnData(const UMalogicPawnData* InPawnData)
+{
+	check(InPawnData);
+
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	if (PawnData)
+	{
+		if (PawnData != InPawnData)
+		{
+			UE_LOG(LogMalogic, Error, TEXT("Trying to replace PawnData [%s] on PlayerState [%s] that already has PawnData [%s]."), *GetNameSafe(InPawnData), *GetNameSafe(this), *GetNameSafe(PawnData));
+		}
+		return;
+	}
+
+	PawnData = InPawnData;
+	for (const UAbilitySet* AbilitySet : PawnData->AbilitySets)
+	{
+		if (AbilitySet)
+		{
+			AbilitySet->GiveToAbilitySystem(AbilitySystemComponent, nullptr);
+		}
+	}
+
+	if (APawn* Pawn = GetPawn())
+	{
+		if (UMalogicPawnExtensionComponent* PawnExtensionComp = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+		{
+			PawnExtensionComp->SetPawnData(PawnData);
+		}
+	}
+
+	ForceNetUpdate();
+}
+
+void AMalogicPlayerState::OnRep_PawnData()
+{
+	if (APawn* Pawn = GetPawn())
+	{
+		if (UMalogicPawnExtensionComponent* PawnExtension = UMalogicPawnExtensionComponent::FindPawnExtensionComponent(Pawn))
+		{
+			PawnExtension->HandlePlayerStateReplicated();
+		}
+	}
 }
 
 //初始化ASC->InitAbilityActorInfo

@@ -66,18 +66,19 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/** Initializes the local hero after PawnData, ASC, and input are all ready. */
+	void TryInitializeHero();
+
 	virtual void InitializePlayerInput(UInputComponent* PlayerInputComponent);
 
-	//void Input_AbilityInputTagPressed(FGameplayTag InputTag);
-	//void Input_AbilityInputTagReleased(FGameplayTag InputTag);
+	void Input_AbilityInputTagPressed(FGameplayTag InputTag);
+	void Input_AbilityInputTagReleased(FGameplayTag InputTag);
 
 	void Input_Move(const FInputActionValue& InputActionValue);
 	void Input_LookMouse(const FInputActionValue& InputActionValue);
 	void Input_LookStick(const FInputActionValue& InputActionValue);
 	void Input_Crouch(const FInputActionValue& InputActionValue);
-	// UE_API void Input_AutoRun(const FInputActionValue& InputActionValue);
 
-	//TSubclassOf<UMRCameraMode> DetermineCameraMode() const;
 
 protected:
 	UPROPERTY(EditAnywhere)
