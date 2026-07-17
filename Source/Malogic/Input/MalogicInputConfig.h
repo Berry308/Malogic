@@ -2,7 +2,6 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "GameplayTagContainer.h"
 
@@ -33,7 +32,7 @@ public:
 /**
  * 
  */
-UCLASS()
+UCLASS(BlueprintType,Const)
 class MALOGIC_API UMalogicInputConfig : public UDataAsset
 {
 	GENERATED_BODY()
@@ -42,10 +41,10 @@ public:
 
 	UMalogicInputConfig(const FObjectInitializer& ObjectInitializer);
 
-	UFUNCTION(BlueprintCallable, Category = "Lyra|Pawn")
+	UFUNCTION(BlueprintCallable, Category = "Pawn")
 	const UInputAction* FindNativeInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound = true) const;
 
-	UFUNCTION(BlueprintCallable, Category = "Lyra|Pawn")
+	UFUNCTION(BlueprintCallable, Category = "Pawn")
 	const UInputAction* FindAbilityInputActionForTag(const FGameplayTag& InputTag, bool bLogNotFound = true) const;
 
 public:

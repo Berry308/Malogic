@@ -35,7 +35,7 @@ struct FInputMappingContextAndPriority
 /**
  * 
  */
-UCLASS()
+UCLASS(BlueprintType, Meta = (BlueprintSpawnableComponent))
 class MALOGIC_API UMalogicHeroComponent : public UPawnComponent
 {
 	GENERATED_BODY()

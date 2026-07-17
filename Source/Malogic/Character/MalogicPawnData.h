@@ -2,12 +2,11 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "AbilitySystem/AbilitySet.h"
 #include "MalogicPawnData.generated.h"
 
 class APawn;
-class UAbilitySet;
 class UAbilityTagRelationshipMapping;
 class UMalogicInputConfig;
 
