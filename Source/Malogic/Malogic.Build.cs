@@ -17,6 +17,7 @@ public class Malogic : ModuleRules
             "GameplayAbilities",
             "InputCore", 
 			"Lua",
+			"UnLua",
 			"ModularGameplay",
 			"ModularGameplayActors",
 			"NetCore",

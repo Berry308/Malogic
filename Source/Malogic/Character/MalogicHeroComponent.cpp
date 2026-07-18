@@ -182,6 +182,7 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 		bReadyToBindInputs = true;
 		UE_LOG(LogMalogic, Log, TEXT("HeroComponent is Ready To Bind Inputs"));
 	}
+	UE_LOG(LogMalogic, Warning, TEXT("HeroComponent is InitializePlayerInput"));
 }
 
 //被GameFeatureAction_InputBinding所使用
