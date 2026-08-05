@@ -134,7 +134,7 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 
 	Subsystem->ClearAllMappings();
 
-
+	//添加默认输入映射上下文
 	for (const FInputMappingContextAndPriority& Mapping : DefaultInputMappings)
 	{
 		if (UInputMappingContext* IMC = Mapping.InputMapping.LoadSynchronous())
@@ -163,7 +163,7 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 		return;
 	}
 
-	// Add the key mappings that may have been set by the player
+	// Add the key mappings that may have been set by the player。空的
 	InputComp->AddInputMappings(InputConfig, Subsystem);
 
 	// This is where we actually bind and input action to a gameplay tag, which means that Gameplay Ability Blueprints will

@@ -28,7 +28,7 @@ const UMalogicInventoryItemFragment* UMalogicInventoryItemDefinition::FindFragme
 	return nullptr;
 }
 
-const UMalogicInventoryItemFragment* ULyraInventoryFunctionLibrary::FindItemDefinitionFragment(TSubclassOf<UMalogicInventoryItemDefinition> ItemDef, TSubclassOf<UMalogicInventoryItemFragment> FragmentClass)
+const UMalogicInventoryItemFragment* UMalogicInventoryFunctionLibrary::FindItemDefinitionFragment(TSubclassOf<UMalogicInventoryItemDefinition> ItemDef, TSubclassOf<UMalogicInventoryItemFragment> FragmentClass)
 {
 	if ((ItemDef != nullptr) && (FragmentClass != nullptr))
 	{

@@ -123,10 +123,10 @@ void UMalogicEquipmentInstance::OnRep_Instigator()
 {
 }
 
-TSubclassOf<UAnimInstance> UMalogicEquipmentInstance::GetFirstPersonAnimInstanceClass() const
-{
-	return FirstPersonAnimInstanceClass;
-}
+//TSubclassOf<UAnimInstance> UMalogicEquipmentInstance::GetFirstPersonAnimInstanceClass() const
+//{
+//	return FirstPersonAnimInstanceClass;
+//}
 
 TSubclassOf<UAnimInstance> UMalogicEquipmentInstance::GetThirdPersonAnimInstanceClass() const
 {

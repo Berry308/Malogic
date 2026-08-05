@@ -39,7 +39,7 @@ public:
 };
 
 UCLASS()
-class ULyraInventoryFunctionLibrary : public UBlueprintFunctionLibrary
+class UMalogicInventoryFunctionLibrary : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 

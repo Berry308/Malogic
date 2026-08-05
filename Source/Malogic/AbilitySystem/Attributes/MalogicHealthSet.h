@@ -56,6 +56,7 @@ protected:
 	UFUNCTION()
 	void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
 
+	//在GE执行前，对应用目标进行检查（如是否包含伤害免疫标签，返回是否可以执行的bool
 	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 	/*
 	* 实际对AttributeData作出更改的函数
@@ -63,9 +64,8 @@ protected:
 	*/
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 
-	//在改变属性的基础值前调用
+	//下列函数均在PostGameplayEffectExecute中进行属性设置后调用，详情见源码
 	virtual void PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const override;
-	//在改变属性的当前值(基础值+修正值)前调用
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
 	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 

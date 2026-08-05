@@ -168,6 +168,7 @@ void UMalogicHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 	bOutOfHealth = (GetHealth() <= 0.0f);
 }
 
+//在改变属性的基础值前调用
 void UMalogicHealthSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
 {
 	Super::PreAttributeBaseChange(Attribute, NewValue);
@@ -175,6 +176,7 @@ void UMalogicHealthSet::PreAttributeBaseChange(const FGameplayAttribute& Attribu
 	ClampAttribute(Attribute, NewValue);
 }
 
+//在改变属性的当前值(基础值+修正值)前调用
 void UMalogicHealthSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);

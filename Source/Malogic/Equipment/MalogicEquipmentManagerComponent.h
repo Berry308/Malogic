@@ -46,12 +46,16 @@ struct FMalogicEquipmentList : public FFastArraySerializer
 	FMalogicEquipmentList() : OwnerComponent(nullptr) {}
 	FMalogicEquipmentList(UActorComponent* InOwnerComponent) : OwnerComponent(InOwnerComponent) {}
 
+	//在客户端从 Items 数组中真正移除元素之前调用。
 	void PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize);
+	//在客户端向 Items 数组中添加完新元素之后调用。
 	void PostReplicatedAdd(const TArrayView<int32> AddedIndices, int32 FinalSize);
+	//PostReplicatedChange：在客户端更新了数组中现有元素的属性之后调用。
 	void PostReplicatedChange(const TArrayView<int32> ChangedIndices, int32 FinalSize);
 
 	bool NetDeltaSerialize(FNetDeltaSerializeInfo& DeltaParms)
 	{
+		//这是由 Unreal 提供的高度优化的静态函数。它会自动对比当前数组状态与客户端已知的状态，计算出“增量”（Delta），并进行二进制读写。
 		return FFastArraySerializer::FastArrayDeltaSerialize<FMalogicAppliedEquipmentEntry, FMalogicEquipmentList>(Entries, DeltaParms, *this);
 	}
 
@@ -69,6 +73,7 @@ private:
 	TObjectPtr<UActorComponent> OwnerComponent;
 };
 
+//告诉 Unreal 引擎：“FMalogicEquipmentList包含了一个自定义的 NetDeltaSerialize 函数，请在网络同步时调用它，而不是使用默认的同步逻辑。”
 template<>
 struct TStructOpsTypeTraits<FMalogicEquipmentList> : public TStructOpsTypeTraitsBase2<FMalogicEquipmentList>
 {

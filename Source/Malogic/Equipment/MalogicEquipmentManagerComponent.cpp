@@ -20,6 +20,7 @@ FString FMalogicAppliedEquipmentEntry::GetDebugString() const
 	return FString::Printf(TEXT("%s of %s"), *GetNameSafe(Instance), *GetNameSafe(EquipmentDefinition.Get()));
 }
 
+//
 void FMalogicEquipmentList::PreReplicatedRemove(const TArrayView<int32> RemovedIndices, int32 FinalSize)
 {
 	for (int32 Index : RemovedIndices)
@@ -55,6 +56,7 @@ UMalogicAbilitySystemComponent* FMalogicEquipmentList::GetAbilitySystemComponent
 	return Cast<UMalogicAbilitySystemComponent>(UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(OwningActor));
 }
 
+//构建Entry并添加到列表中，赋予EquipmentDefinition的AbilitySet，生成Equipment的Actor。
 UMalogicEquipmentInstance* FMalogicEquipmentList::AddEntry(TSubclassOf<UMalogicEquipmentDefinition> EquipmentDefinition)
 {
 	UMalogicEquipmentInstance* Result = nullptr;
