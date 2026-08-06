@@ -34,6 +34,7 @@ class MALOGIC_API UMalogicHealthSet : public UMalogicAttributeSet
 public:
 	UMalogicHealthSet();
 
+	//Getter获取的是CurrentValue，Setter设置的是BaseValue
 	ATTRIBUTE_ACCESSORS(UMalogicHealthSet, Health);
 	ATTRIBUTE_ACCESSORS(UMalogicHealthSet, MaxHealth);
 	ATTRIBUTE_ACCESSORS(UMalogicHealthSet, Healing);
@@ -49,7 +50,7 @@ public:
 	mutable FMRAttributeEvent OnOutOfHealth;
 
 protected:
-
+	//如果你在 OnRep 函数中声明了一个与同步属性类型相同的参数，引擎会自动将同步发生前的本地值（Old Value）作为参数传入。
 	UFUNCTION()
 	void OnRep_Health(const FGameplayAttributeData& OldValue);
 
@@ -74,6 +75,7 @@ protected:
 private:
 
 	// The current health attribute.  The health will be capped by the max health attribute.  Health is hidden from modifiers so only executions can modify it.
+	// HideFromModifiers隐藏该属性在编辑器（GameplayEffect 编辑器里的 Modifier 下拉列表）中的显示。 只有GameplayEffectExecutionCalculation可以修改该属性
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "MazeRunner|Health", Meta = (HideFromModifiers, AllowPrivateAccess = true))
 	FGameplayAttributeData Health;
 

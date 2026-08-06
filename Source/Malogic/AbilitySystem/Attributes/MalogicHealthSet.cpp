@@ -105,7 +105,7 @@ bool UMalogicHealthSet::PreGameplayEffectExecute(FGameplayEffectModCallbackData&
 	return true;
 }
 
-//根据Data.EvaluatedData.Attribute实施对应Attribute的修改
+//该函数只在服务器上调用
 void UMalogicHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
@@ -143,6 +143,8 @@ void UMalogicHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 	else if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
 		// Clamp and fall into out of health handling below
+		//在 Lyra 的设计体系中，Health 属性被严谨地规定为“只允许瞬时修改”。因此在 PostGameplayEffectExecute 触发时，CurrentValue 理论上应该等于刚刚被修改后的 BaseValue
+		//此处主要是为了修正BaseValue
 		SetHealth(FMath::Clamp(GetHealth(), MinimumHealth, GetMaxHealth()));
 	}
 	else if (Data.EvaluatedData.Attribute == GetMaxHealthAttribute())
@@ -168,7 +170,7 @@ void UMalogicHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 	bOutOfHealth = (GetHealth() <= 0.0f);
 }
 
-//在改变属性的基础值前调用
+//在改变属性的BaseValue前调用
 void UMalogicHealthSet::PreAttributeBaseChange(const FGameplayAttribute& Attribute, float& NewValue) const
 {
 	Super::PreAttributeBaseChange(Attribute, NewValue);
@@ -176,7 +178,7 @@ void UMalogicHealthSet::PreAttributeBaseChange(const FGameplayAttribute& Attribu
 	ClampAttribute(Attribute, NewValue);
 }
 
-//在改变属性的当前值(基础值+修正值)前调用
+//在改变属性的CurrentValue(基础值+修正值)前调用
 void UMalogicHealthSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
