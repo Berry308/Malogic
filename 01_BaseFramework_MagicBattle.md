@@ -59,7 +59,7 @@
 + 使用先前玩家通过输入指定的魔法阵位置。
 
 ### 初始化魔法阵（自动激活或选择激活）
-生成 MagicCircleInstance 后，根据 MagicCircleDefinition 中定义的 AbilitySet 对其 ASC 进行初始化，包括初始化血量的 GE 和赋予 MagicCircleInstance 本身的魔法能力。
+生成 MagicCircleInstance 后，根据 MagicCircleDefinition 中定义的 AbilitySet 对其 ASC 进行初始化，包括初始化血量的 GE、赋予 MagicCircleInstance 本身的魔法能力，以及将每个 GA 的 `ActivationTags` 写入其动态 Spec Tags。
 
 ### 激活魔法阵
 激活方式：
@@ -68,9 +68,9 @@
 + 由玩家指定，手动激活（扩展）
 
 ### 魔法阵释放魔法（有可能存在不自动释放的魔法）
-在激活后，所有魔法阵都有构建的动画（目前的想法是控制透明度从 0 到 1）
+魔法阵在部署并完成初始化后，必定先进入 Building 阶段，播放构建动画（目前的想法是控制透明度从 0 到 1）。
 
-在播放完魔法阵构建的动画后，魔法阵就会自动施放魔法
+构建完成后进入 Ready 阶段，再根据 ActivateStrategy 自动激活、等待玩家激活或等待检测条件。魔法能力激活后才进入 Active 阶段并释放魔法。
 
 ## 工程计划
 第一阶段：搭建魔法战斗的基础框架
@@ -109,6 +109,40 @@
 
 ---
 
+# AbilitySet 中的能力标签数组添加
+## 概述
+
+`FAbilitySet_GameplayAbility` 同时支持玩家输入激活Tag和其它用途的FGameplayTag。两者都通过 `FGameplayAbilitySpec` 的动态 Spec Tags 保存，但语义必须分开。
+
+## 成员
+
+```cpp
+TArray<FGameplayTag> ActivationTags // 目前用于内部按标签查找和激活能力
+```
+
+标签命名空间必须区分：
+
++ `InputTag.*` 只用于 `AbilityInputTagPressed` 和 `ProcessAbilityInput`；
++ `MagicCircle.Ability.*` 用于 MagicCircleInstance 内部的阶段能力调度。
+
+建议使用明确的阶段标签，例如：
+
++ `MagicCircle.Ability.BuildFinished`：构建完成时调用；
++ `MagicCircle.Ability.Activate`：魔法阵正式激活时调用；
++ `MagicCircle.Ability.TargetDetected`：检测到目标时调用；
++ `MagicCircle.Ability.Destroyed`：魔法阵销毁前调用。
+
+## GiveToAbilitySystem
+
+授予 `FAbilitySet_GameplayAbility` 时：
+
++ 遍历 `ActivationTags`，将每个有效 Tag 加入同一个动态 Spec Tags 容器；
++ 空 Tag 不参与激活，重复 Tag 由 GameplayTagContainer 自动去重；
+
+同一个 `ActivationTag` 可以配置给多个 GA，表示该阶段需要并行激活多个能力。若某阶段只允许一个 GA，应在数据配置中保持唯一。
+
+---
+
 # MagicComponent
 ## 概述
 仿照 HealthComponent 来写
@@ -129,50 +163,252 @@
 
 # MagicCircleInstance
 ## 概述
-基类：Actor
+基类：`AActor`（建议类名为 `AMalogicMagicCircleInstance`）
+
+每个魔法阵实例都是一个独立的 GAS Actor，拥有自己的 ASC、HealthSet 和生命周期。实例由服务器生成并复制；客户端不负责决定实例是否生成、何时施法或是否死亡，只负责根据复制状态播放表现。
 
 职责：
 
-+ 作为魔法阵的实例，由玩家部署与创建
-+ 持有 AbilitySystemComponent
++ 保存该次部署的魔法阵运行时状态，以及部署者/Instigator 和来源数据；
++ 持有并初始化自己的 `UMalogicAbilitySystemComponent`；
++ 通过 `AbilitySetForMagicCircle` 获得血量、战斗属性和魔法能力；
++ 处理构建、激活、受击、释放和销毁；
++ 负责把血量归零转换为服务器权威的销毁流程。
 
-<font style="color:#DF2A3F;">注意：</font>
+### 所有权与网络约定
 
-部分魔法不和魔法阵绑定生命周期，有些则绑定
++ `bReplicates = true`。魔法阵通常是固定位置 Actor，不需要复制移动，除非某种魔法明确要求移动；
++ ASC 的 `OwnerActor` 和 `AvatarActor` 都指向该魔法阵实例。部署者保存为 `Instigator`/来源 Actor，用于效果上下文、阵营判断和伤害归属；
++ `MalogicGA_(MagicName)Deploy` 仅在服务器上执行计算和生成，在生成实例前根据 MagicWeapon 的属性、Definition 的 `BaseBuildingTime` 和其它状态计算 `ActualBuildingTime`；
++ 服务器在生成实例时将 Definition、部署者、部署变换和 `ActualBuildingTime` 一并传入实例，并初始化 ASC、授予 AbilitySet；
++ `ActualBuildingTime` 表示服务器计算出的魔法阵构建时间。服务器将 `MagicCircleState` 切换为 `Building` 后，客户端在收到该复制状态时播放构建动画；
++ 目标位置、朝向、部署者和 Definition 必须在生成时确定并保存，后续不能从玩家当前装备项重新读取；
++ 服务器销毁实例前取消其仍在运行的能力并回收 AbilitySet 的 GrantedHandles。
+
+### 生命周期状态
+
+建议使用可复制的状态枚举，而不是通过多个布尔值推断状态：
+
++ `Spawned`：Actor 已生成，正在完成 ASC、AbilitySet 和部署参数初始化；
++ `Building`：服务器根据 `ActualBuildingTime` 启用构建计时器，客户端播放魔法阵构建表现；
++ `Ready`：构建完成，等待自动或手动激活；
++ `Active`：已激活魔法能力；
++ `Finished`：本次魔法已经释放，但实例是否销毁由生命周期策略决定；
++ `Destroyed`：血量归零、被取消或生命周期结束，进入销毁流程。
+
+`EMagicCircleState` 使用 `UENUM(BlueprintType)` 定义，并通过 `ReplicatedUsing` 驱动客户端表现。
+
+### 生命周期策略
+
+定义枚举类 `EMagicCircleLifetimeStrategy`。例如：
+
++ OnceAfterSomeGA //一次性魔法，标志为该策略的魔法阵将会在某个GA释放结束后，推进到生命周期状态到Finish
++ PersistentTilDie //持续存在直到血量归零或Lifetime结束，通常用于可以反复激活的魔法阵。
+
+不能再使用“部分绑定、部分不绑定”的隐式约定；每种魔法都应通过一个明确的生命周期策略配置。
+
+### 魔法阵激活策略
+
+定义枚举类 `EMagicCircleActivateStrategy` 描述魔法阵激活策略。该枚举属于 `MagicCircleInstance` 的默认配置，由具体的魔法阵实例子类在 Blueprint 编辑器中指定；Definition 不负责覆盖该配置。
+
++ 自动激活
++ 玩家手动激活
++ 检测激活（陷阱等）
 
 ## 成员
 变量：
 
-bool bIsInstantActivate //是否是即时施放魔法
+protected:
 
-float BaseActivateTime //从魔法阵显形到魔法释放的基础时间
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+EMagicCircleLifetimeStrategy LifetimeStrategy // 魔法阵的生命周期策略
 
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+EMagicCircleActivateStrategy ActivateStrategy // 魔法阵的激活策略
+
+UPROPERTY(Replicated)
+float ActualBuildingTime // 服务器MalogicGA_(MagicName)Deploy根据武器、状态和效果计算后的实际构建时间
+
+UPROPERTY(ReplicatedUsing = OnRep_MagicCircleState)
+EMagicCircleState MagicCircleState
+
+UPROPERTY(Replicated)
+TSubclassOf<UMagicCircleDefinition> MagicCircleDefinitionClass // 本次部署使用的 Definition 类
+
+UPROPERTY()
 TObjectPtr<UMalogicAbilitySystemComponent> AbilitySystemComponent
 
-TObjectPtr<UHealthComponent> HealthComponent
+UPROPERTY()
+TObjectPtr<UMalogicHealthComponent> HealthComponent
 
+UPROPERTY()
 TObjectPtr<UMalogicHealthSet> HealthSet
 
-TObjectPtr<UMalogicCombatSet> CombatSet 
+UPROPERTY()
+TObjectPtr<UMalogicCombatSet> CombatSet
+
+UPROPERTY(Replicated)
+TObjectPtr<AActor> DeploymentInstigator
+
+// 运行时授予本实例的能力、效果和属性集，用于销毁前回收
+FAbilitySet_GrantedHandles GrantedHandles
+
+private:
+
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+float LifeTime // Ready 阶段开始计时的存活时间；小于等于 0 时不启用该计时器
+
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+TSubclassOf<UMalogicGameplayAbility> FinishAbilityClass // 当该类型能力释放结束后会推进魔法阵生命状态到Finish
+
+FTimerHandle LifeTimeTimerHandle
+bool bLifeTimeExpired = false
 
 函数：
 
 public:
 
-UMalogicMagicCircleInstance()
+AMalogicMagicCircleInstance()
++ 创建 ASC 和 HealthComponent；
++ 设置 Replication；
++ 将 ASC 的 OwnerActor 和 AvatarActor 初始化为实例自身。
 
-+ 创建AbilitySystemComponent
-+ 创建 HealthSet
-+ 设置 Replication
+void InitializeFromDefinition(const UMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime)
++ 在 `BeginPlay` 前保存 Definition、部署者和本次部署参数；
++ 接收并保存由 `MalogicGA_(MagicName)Deploy` 计算出的 `ActualBuildingTime`；
++ 由服务器调用，不能在此处直接激活魔法。
 
-void K2_BeginPlay() （蓝图内实现）
+void InitializeLifetime()
++ 仅服务器执行生命周期初始化和委托绑定；
++ 如果 `LifetimeStrategy == OnceAfterSomeGA`，`FinishAbilityClass` 不能为空，否则报告配置错误；配置有效时绑定 `OnAbilityFinished` 到 `ASC->OnAbilityEnded`；
++ 如果 `LifetimeStrategy == PersistentTilDie`，`FinishAbilityClass` 必须为空，否则报告配置错误并跳过能力结束绑定。
 
-+ 蓝图本地播放魔法阵启动动画
-+ 在动画播放完毕后，回调 ActivateMagic。
+void BeginPlay()
++ 初始化 ASC ActorInfo；
++ 服务器根据 Definition 的 AbilitySet 授予属性集、初始血量 GE 和魔法能力，并保存 `GrantedHandles`；
++ 调用InitializeLifetime函数
++ 调用 HealthComponent 的 `InitializeWithAbilitySystem`；
++ 服务器调用 `StartBuilding`，所有魔法阵都必须从 `Building` 阶段开始；
++ 客户端等待 `MagicCircleState` 的初始复制，不在 `BeginPlay` 中自行决定是否开始构建动画。
 
-void ActivateMagic()
+void StartBuilding()
++ 仅服务器调用，并校验当前状态为 `Spawned`；
++ 将状态切换为 `Building`，调用 `OnMagicCircleStateChanged`；
++ 构建计时器由 `OnMagicCircleStateChanged` 在服务器分支中启动，计时长度为 `ActualBuildingTime`，计时结束后调用 `HandleBuildingFinished`。
 
-+ 激活当前 ASC 中的 ActivatableAbilities.Items（在初始化的时候 MagicCircleDefinition 会将 AbilitySet 赋予 MagicCircleInstance 的 ASC。
+void HandleBuildingFinished()
++ 仅服务器调用，并校验当前状态为 `Building`；
++ 清理构建计时器；
++ 将状态切换为 `Ready`，调用 `OnMagicCircleStateChanged`；
++ 是否自动激活以及使用哪个 `ActivationTag`，由 `OnMagicCircleStateChanged` 的 `Ready` 分支统一处理。
+
+void OnRep_MagicCircleState(EMagicCircleState OldState)
++ 客户端收到服务器复制的状态后调用 `OnMagicCircleStateChanged(OldState, MagicCircleState)`；
++ 不负责推进服务器状态，也不负责启动服务器计时器。
+
+void OnMagicCircleStateChanged(EMagicCircleState OldState,EMagicCircleState NewState)
++ 根据 `NewState` 分发状态处理逻辑；该函数可以在服务器状态切换后调用，也可以由客户端的 `OnRep_MagicCircleState` 调用；
++ `Building`：服务器启动构建计时器，客户端根据 `ActualBuildingTime` 播放构建动画；
++ `Ready`：客户端结束构建动画；服务器启动 `LifeTime` 计时器，先按需调用 `ActivateAbilitiesByTag(MagicCircle.Ability.BuildFinished)`，再根据 `ActivateStrategy` 决定是否调用 `ActivateMagic(MagicCircle.Ability.Activate)`；
++ `Active`：客户端播放魔法释放表现；
++ `Finished`：停止生命周期计时器，根据生命周期策略播放结束表现或等待销毁；
++ `Destroyed`：服务器按需调用 `ActivateAbilitiesByTag(MagicCircle.Ability.Destroyed)`，再取消能力、回收 GrantedHandles 并延迟销毁 Actor（通过SetLifeSpan(0.5f)实现 ）；客户端播放销毁表现。
+
+void AMalogicMagicCircleInstance::OnAbilityFinished(const FAbilityEndedData& AbilityEndedData)
++ 仅服务器处理；
++ 先判断 `AbilityEndedData.AbilityThatEnded` 和 `FinishAbilityClass` 是否有效；
++ 通过 `AbilityEndedData.AbilityThatEnded->GetClass() == FinishAbilityClass` 判断结束的能力类型；
++ 如果当前 `MagicCircleState` 不是 `Active`，直接返回；
++ 如果能力被取消，按照魔法阵的取消策略处理，不能默认当作正常释放完成；
++ 如果结束的是指定的魔法能力，调用 `FinishMagicCircle`。
+
+bool ActivateAbilitiesByTag(const FGameplayTag& ActivationTag)
++ 仅服务器调用；
++ 遍历该 ASC 的 `ActivatableAbilities.Items`，查找动态 Spec Tags 中精确匹配 `ActivationTag` 的所有 GA 句柄；
++ 先收集匹配的 `FGameplayAbilitySpecHandle`，再逐个调用 `TryActivateAbility`，避免激活过程中修改能力列表影响遍历；
++ 返回是否至少有一个 GA 成功激活；
++ 不调用 `AbilityInputTagPressed` 或 `ProcessAbilityInput`，不将魔法阵内部调度伪装成玩家输入。
+
+void ActivateMagic(const FGameplayTag& ActivationTag)
++ 仅允许服务器执行，并校验当前状态为 `Ready`；
++ 调用 `ActivateAbilitiesByTag(ActivationTag)` 激活该阶段的一个或多个 GA；
++ 只有能力激活成功后，才将状态切换为 `Active` 并调用 `OnMagicCircleStateChanged`；激活失败时保持 `Ready` 或进入明确的失败状态；
++ 能力结束后的状态推进由 `OnAbilityFinished` 和共用的 `FinishMagicCircle` 处理。
+
+### 魔法阵结束策略
+
+魔法阵结束必须最终通过同一个 `FinishMagicCircle` 函数完成，确保状态切换、计时器清理和 `OnMagicCircleStateChanged` 调用只执行一次。结束条件可以由生命周期时间或指定魔法能力结束触发。
+
+#### 方式一：LifeTime 结束
+
+`LifeTime` 从 `Ready` 阶段开始计时，而不是从 Actor 生成时开始计时。`LifeTime` 小于等于 0 时表示不启用生命周期计时器，必须由其它结束条件销毁实例。
+
+```cpp
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+float LifeTime
+```
+
+函数：
+
+```cpp
+void StartLifeTimeTimer()
+```
+
++ 仅服务器调用；
++ 在 `Ready` 状态开始计时，并绑定 `OnMagicCircleLifeTimeEnded`；
++ `Finished` 或 `Destroyed` 状态不再启动计时器。
+
+```cpp
+void OnMagicCircleLifeTimeEnded()
+```
+
++ 仅服务器调用；
++ 如果当前状态为 `Finished` 或 `Destroyed`，直接返回；
++ 如果当前状态为 `Active`，记录 `bLifeTimeExpired = true` 并等待指定的魔法能力结束，不能简单丢弃这次回调；
++ 如果当前状态为 `Ready`，调用 `FinishMagicCircle`；
++ 如果没有配置指定的结束能力，则生命周期到期时应直接调用 `FinishMagicCircle`，不能让实例永久停留在 `Active`。
+
+#### 方式二：指定能力结束
+
+实例绑定 ASC 的 `OnAbilityEnded` 数据委托。UE 5.6 中该回调接收 `const FAbilityEndedData&`，其中包含结束能力对象和 `bWasCancelled`。
+
+```cpp
+UPROPERTY(EditDefaultsOnly, meta = (AllowPrivateAccess = "true"))
+TSubclassOf<UMalogicGameplayAbility> FinishAbilityClass
+```
+
+函数：
+
+```cpp
+void OnAbilityFinished(const FAbilityEndedData& AbilityEndedData)
+```
++ 仅服务器处理；
++ 在 ASC 初始化并授予 AbilitySet 后，仅当服务器上的 `FinishAbilityClass` 不为空时绑定到 `AbilitySystemComponent->OnAbilityEnded`；
++ 判断`AbilityEndedData.AbilityThatEnded->GetClass() == FinishAbilityClass`选择结束
++ 如果结束的是指定的魔法能力，调用 `FinishMagicCircle`。
++ 在 `EndPlay` 或 ASC 反初始化时解除绑定；
++ 如果 `LifeTime` 已经到期并记录了 `bLifeTimeExpired`，指定能力在 `Active` 状态结束后立即调用 `FinishMagicCircle`。
+
+
+#### 共用结束函数
+
+
+void FinishMagicCircle()
++ 仅服务器调用，并保证幂等；
++ 只允许从 `Ready` 或 `Active` 进入 `Finished`；
++ 清理 `LifeTime` 计时器；
++ 将 `MagicCircleState` 切换为 `Finished`，调用 `OnMagicCircleStateChanged`；
++ 如果LifetimeStrategy为OnceAfterSomeGA，那么就要推进魔法阵生命状态到Destroyed
+
+void HandleOutOfHealth()
++ 仅服务器处理；
++ 将状态切换为 `Destroyed`，调用 `OnMagicCircleStateChanged`；
++ 由 `OnMagicCircleStateChanged` 的 `Destroyed` 分支按顺序调度销毁前能力、取消其它能力、回收 GrantedHandles 并销毁 Actor；
++ 客户端通过 `OnRep_MagicCircleState` 播放受击结束和销毁表现。
+
+void EndPlay(const EEndPlayReason::Type EndPlayReason)
++ 解除 `OnAbilityEnded` 委托、取消所有计时器并清理实例对外部对象的引用；
++ 确保 ASC 和 AbilitySet 的运行时资源不会在 Actor 销毁后残留。
 
 ---
 
@@ -191,11 +427,15 @@ UCLASS(Blueprintable, Const, Abstract, BlueprintType)
 ## 成员
 变量：
 
-TSubclassOf<UMagicCircleInstance> MagicCircleToSpawn //部署时生成的魔法阵实例类型
+TSubclassOf<AMalogicMagicCircleInstance> MagicCircleToSpawn //部署时生成的魔法阵实例类型
 
 FInputMappingContextAndPriority InputMapping //装备该魔法阵时追加的本地输入映射
 
 bool bIsPreDeploy //是否需要显示本地预部署轮廓
+
+bool bIsLifetimeFollowInstigator //魔法阵是否随玩家死亡而销毁（在部署的时候，该选项为true的MagicCircleInstance指针会被添加到MagicCircleManagerComponent成员数组TArray<TObjectPtr<MagicCircleInstance>> MagicCircleFollowPlayerLifetime中
+
+float BaseBuildingTime //魔法阵构建的基本时间，在MalogicGA_(MagicName)Deploy中会根据武器属性以及一些可能的状态计算魔法阵的实际构建时间
 
 TSubclassOf<AActor> PreviewActor //预部署时显示的本地轮廓 Actor 类型
 
@@ -484,14 +724,30 @@ OnUnEquipped()
 
 职责：
 
-+ 从 MalogicMagicCircleManagerComponent 中获取当前装备的 MagicCircleDefinition
-+ 
++ 从自身 AbilitySpec 的 `SourceObject` 获取本次施法绑定的 MagicCircleDefinition CDO，不重新查询 MagicCircleManagerComponent 的当前装备；
++ 根据部署策略进行射线检测、目标过滤、位置约束和朝向计算；
++ 读取 Definition 的 `BaseBuildingTime`，结合 MagicWeapon 属性、GameplayEffect、GameplayTag 和其它状态计算 `ActualBuildingTime`；
++ 对 `ActualBuildingTime` 进行最小值和最大值限制，不能通过非法值绕过 `Building` 阶段；
++ 在服务器上使用 Deferred Spawn 创建 `AMalogicMagicCircleInstance`，并在 `FinishSpawning` 前传入 Definition、部署者、部署变换和 `ActualBuildingTime`；
++ 验证部署请求的权限、距离、资源和目标数据，验证通过后才生成实例。
+
+函数：
+
+`CalculateActualBuildingTime(const UMagicCircleDefinition* Definition)`
++ 仅服务器调用；
++ 以 Definition 的 `BaseBuildingTime` 为基础值；
++ 结合当前 MagicWeapon、来源 ASC 上的属性和标签，以及其它影响施法时间的状态计算最终值；
++ 返回经过限制后的 `ActualBuildingTime`。
+
+`SpawnMagicCircleInstance(const UMagicCircleDefinition* Definition, const FTransform& DeployTransform, float ActualBuildingTime)`
++ 仅服务器调用；
++ 使用 Definition 的 `MagicCircleToSpawn` 创建实例；
++ 调用 `InitializeFromDefinition(Definition, Instigator, ActualBuildingTime)`；
++ 完成实例生成后由实例自身进入 `Building`，部署 GA 不直接激活实例魔法能力。
 
 问题：
 
-对于不同的魔法，存在不同的部署方式，如有的魔法需要发出射线检测获取命中点
-
-或许 DeployGA 可以复用，所以命名方式需要更改，魔法阵实例子类需要从别的地方获取而不是硬编码在 GA 中。
+对于不同的魔法，存在不同的部署方式，如有的魔法需要发出射线检测获取命中点。部署 GA 可以通过部署策略或子类复用，魔法阵实例类型和构建时间均从 Definition 和运行时参数获取，不能硬编码在 GA 中。
 
 # MalogicGA_(MagicName)
 ## 概述

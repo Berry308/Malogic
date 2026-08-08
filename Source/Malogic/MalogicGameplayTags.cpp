@@ -31,6 +31,11 @@ namespace MalogicGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayEvent_Reset, "GameplayEvent.Reset", "Event that fires once a player reset is executed.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(GameplayEvent_RequestReset, "GameplayEvent.RequestReset", "Event to request a player's pawn to be instantly replaced with a new one at a valid spawn location.");
 
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(MagicCircle_Ability_BuildFinished, "MagicCircle.Ability.BuildFinished", "Ability activation tag for the build-finished phase of a magic circle.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(MagicCircle_Ability_Activate, "MagicCircle.Ability.Activate", "Ability activation tag for the active phase of a magic circle.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(MagicCircle_Ability_TargetDetected, "MagicCircle.Ability.TargetDetected", "Ability activation tag for target-detected magic circle behavior.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(MagicCircle_Ability_Destroyed, "MagicCircle.Ability.Destroyed", "Ability activation tag for the destruction phase of a magic circle.");
+
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Damage, "SetByCaller.Damage", "SetByCaller tag used by damage gameplay effects.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(SetByCaller_Heal, "SetByCaller.Heal", "SetByCaller tag used by healing gameplay effects.");
 

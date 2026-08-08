@@ -1,26 +1,147 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Abilities/GameplayAbilityTypes.h"
+#include "AbilitySystem/AbilitySet.h"
 #include "GameFramework/Actor.h"
 #include "MalogicMagicCircleInstance.generated.h"
 
-UCLASS()
+class UMalogicAbilitySystemComponent;
+class UMalogicCombatSet;
+class UMalogicGameplayAbility;
+class UMalogicHealthComponent;
+class UMalogicHealthSet;
+class UMalogicMagicCircleDefinition;
+struct FGameplayTag;
+struct FGameplayEffectSpec;
+
+UENUM(BlueprintType)
+enum class EMagicCircleState : uint8
+{
+	Spawned,
+	Building,
+	Ready,
+	Active,
+	Finished,
+	Destroyed
+};
+
+UENUM(BlueprintType)
+enum class EMagicCircleLifetimeStrategy : uint8
+{
+	OnceAfterSomeGA,
+	PersistentTilDie
+};
+
+UENUM(BlueprintType)
+enum class EMagicCircleActivateStrategy : uint8
+{
+	Auto,
+	Manual,
+	Detection
+};
+
+UCLASS(BlueprintType, Blueprintable)
 class MALOGIC_API AMalogicMagicCircleInstance : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
-	// Sets default values for this actor's properties
+
+public:
 	AMalogicMagicCircleInstance();
 
+	void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Magic Circle")
+	void ActivateMagic(const FGameplayTag& ActivationTag);
+
+	UFUNCTION(BlueprintPure, Category = "Magic Circle")
+	EMagicCircleState GetMagicCircleState() const { return MagicCircleState; }
+
+	UFUNCTION(BlueprintPure, Category = "Magic Circle")
+	AActor* GetDeploymentInstigator() const { return DeploymentInstigator; }
+
+	UMalogicAbilitySystemComponent* GetAbilitySystemComponent() const { return AbilitySystemComponent; }
+
 protected:
-	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-public:	
-	// Called every frame
-	virtual void Tick(float DeltaTime) override;
+	void InitializeLifetime();
+	void StartBuilding();
 
+	UFUNCTION()
+	virtual void HandleBuildingFinished();
+	UFUNCTION(BlueprintImplementableEvent, Category = "Magic Circle")
+	void K2_OnBuildingFinished();
+
+	virtual void HandleMagicCircleReady();
+	UFUNCTION(BlueprintImplementableEvent, Category = "Magic Circle")
+	void K2_OnMagicCircleReady();
+
+	virtual void HandleMagicCircleFinished();
+	UFUNCTION(BlueprintImplementableEvent, Category = "Magic Circle")
+	void K2_OnMagicCircleFinished();
+
+	virtual void HandleMagicCircleDestroyed();
+	UFUNCTION(BlueprintImplementableEvent, Category = "Magic Circle")
+	void K2_OnMagicCircleDestroyed();
+
+	UFUNCTION()
+	void OnRep_MagicCircleState(EMagicCircleState OldState);
+
+	void OnMagicCircleStateChanged(EMagicCircleState OldState, EMagicCircleState NewState);
+	bool ActivateAbilitiesByTag(const FGameplayTag& ActivationTag);
+	void StartLifeTimeTimer();
+	void OnMagicCircleLifeTimeEnded();
+	void OnAbilityFinished(const FAbilityEndedData& AbilityEndedData);
+	void FinishMagicCircle();
+	void HandleOutOfHealth();
+	void HandleOutOfHealthEvent(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec, float DamageMagnitude, float OldValue, float NewValue);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
+	EMagicCircleLifetimeStrategy LifetimeStrategy = EMagicCircleLifetimeStrategy::OnceAfterSomeGA;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
+	EMagicCircleActivateStrategy ActivateStrategy = EMagicCircleActivateStrategy::Auto;
+
+	UPROPERTY(Replicated)
+	float ActualBuildingTime = 0.0f;
+
+	//如果OnRep函数中声明了一个与同步属性类型相同的参数，引擎会自动将同步发生前的本地值（Old Value）作为参数传入。
+	UPROPERTY(ReplicatedUsing = OnRep_MagicCircleState)
+	EMagicCircleState MagicCircleState = EMagicCircleState::Spawned;
+
+	UPROPERTY(Replicated)
+	TSubclassOf<UMalogicMagicCircleDefinition> MagicCircleDefinitionClass;
+
+	UPROPERTY()
+	TObjectPtr<UMalogicAbilitySystemComponent> AbilitySystemComponent;
+
+	UPROPERTY()
+	TObjectPtr<UMalogicHealthComponent> HealthComponent;
+
+	//AttributeSet通过AbilitySet添加到ASC中，
+	UPROPERTY()
+	TObjectPtr<const UMalogicHealthSet> HealthSet;
+
+	UPROPERTY()
+	TObjectPtr<const UMalogicCombatSet> CombatSet;
+
+	UPROPERTY(Replicated)
+	TObjectPtr<AActor> DeploymentInstigator;
+
+	FAbilitySet_GrantedHandles GrantedHandles;
+
+private:
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
+	float LifeTime = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
+	TSubclassOf<UMalogicGameplayAbility> FinishAbilityClass;
+
+	FTimerHandle BuildingTimerHandle;
+	FTimerHandle LifeTimeTimerHandle;
+	bool bLifeTimeExpired = false;
+	bool bAbilitySetGranted = false;
 };

@@ -117,6 +117,13 @@ void UAbilitySet::GiveToAbilitySystem(UMalogicAbilitySystemComponent* ASC, FAbil
 		FGameplayAbilitySpec AbilitySpec(AbilityCDO, AbilityToGrant.AbilityLevel);
 		AbilitySpec.SourceObject = SourceObject;
 		AbilitySpec.GetDynamicSpecSourceTags().AddTag(AbilityToGrant.InputTag);
+		for (const FGameplayTag& ActivationTag : AbilityToGrant.ActivationTags)
+		{
+			if (ActivationTag.IsValid())
+			{
+				AbilitySpec.GetDynamicSpecSourceTags().AddTag(ActivationTag);
+			}
+		}
 
 		FString AbilityName = AbilitySpec.Ability ? AbilitySpec.Ability->GetFName().ToString() : TEXT("InvalidAbility");
 		FString AvatarActorName = TEXT("None");

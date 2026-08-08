@@ -18,6 +18,7 @@ namespace
 	{
 		FGameplayEffectAttributeCaptureDefinition BaseDamageDef;
 
+		//构造函数参数含义：要捕获的属性、捕获源（Source表示从施法者捕获，Target表示从目标捕获）、是否快照（true表示在应用效果时捕获属性值，false表示实时捕获属性值）
 		FDamageStatics()
 			: BaseDamageDef(UMalogicCombatSet::GetBaseDamageAttribute(), EGameplayEffectAttributeCaptureSource::Source, true)
 		{

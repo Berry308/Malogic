@@ -40,6 +40,10 @@ public:
 	// Tag used to process input for the ability.
 	UPROPERTY(EditDefaultsOnly, Meta = (Categories = "InputTag"))
 	FGameplayTag InputTag;
+
+	// Tags used by systems other than player input to activate the ability.
+	UPROPERTY(EditDefaultsOnly, Meta = (Categories = "GameplayTag"))
+	TArray<FGameplayTag> ActivationTags;
 };
 
 

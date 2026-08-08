@@ -8,7 +8,7 @@
 #include "MalogicCombatSet.generated.h"
 
 /**
- * 提供基础战斗属性集，如伤害量和治疗量
+ * 提供基础战斗属性集，如伤害量和治疗量，定义在PlayerState中，在DamageExecution中被捕获使用
  */
 UCLASS(BlueprintType)
 class MALOGIC_API UMalogicCombatSet : public UMalogicAttributeSet
