@@ -10,6 +10,14 @@
 
 class AMalogicMagicCircleInstance;
 
+UENUM(BlueprintType)
+enum class EMagicCircleDeployStrategy : uint8
+{
+	CameraRaycast,
+	CameraForward,
+	PawnForward
+};
+
 UCLASS(Blueprintable, Const, Abstract, BlueprintType)
 class MALOGIC_API UMalogicMagicCircleDefinition : public UObject
 {
@@ -19,8 +27,8 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
 	TSubclassOf<AMalogicMagicCircleInstance> MagicCircleToSpawn;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	FInputMappingContextAndPriority InputMapping;
+	UPROPERTY(EditDefaultsOnly, Category = "Input", meta = (FormerlySerializedAs = "InputMapping"))
+	FInputMappingContextAndPriority DeploymentInputMapping;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
 	bool bIsPreDeploy = false;
@@ -34,8 +42,11 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
 	TSubclassOf<AActor> PreviewActor;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (ClampMin = "0.0"))
-	float DefaultDistance = 10.0f;
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (ClampMin = "0.0", FormerlySerializedAs = "DefaultDistance"))
+	float BaseMaxDeployDistance = 1000.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
+	EMagicCircleDeployStrategy DeployStrategy = EMagicCircleDeployStrategy::CameraRaycast;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Sets")
 	TObjectPtr<const UAbilitySet> AbilitySetForPlayer;

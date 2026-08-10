@@ -19,6 +19,7 @@ UMalogicQuickBarComponent::UMalogicQuickBarComponent(const FObjectInitializer& O
 	: Super(ObjectInitializer)
 {
 	SetIsReplicatedByDefault(true);
+	
 }
 
 void UMalogicQuickBarComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

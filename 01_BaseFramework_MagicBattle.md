@@ -429,7 +429,7 @@ UCLASS(Blueprintable, Const, Abstract, BlueprintType)
 
 TSubclassOf<AMalogicMagicCircleInstance> MagicCircleToSpawn //部署时生成的魔法阵实例类型
 
-FInputMappingContextAndPriority InputMapping //装备该魔法阵时追加的本地输入映射
+FInputMappingContextAndPriority DeploymentInputMapping //装备该魔法阵时追加的本地输入映射
 
 bool bIsPreDeploy //是否需要显示本地预部署轮廓
 
@@ -439,7 +439,7 @@ float BaseBuildingTime //魔法阵构建的基本时间，在MalogicGA_(MagicNam
 
 TSubclassOf<AActor> PreviewActor //预部署时显示的本地轮廓 Actor 类型
 
-float DefaultDistance //魔法阵默认生成距离（相对于玩家相机）
+float BaseMaxDeployDistance //魔法阵最大释放距离
 
 TObjectPtr<const UAbilitySet> AbilitySetForPlayer //赋予玩家部署该魔法阵的能力
 
@@ -476,8 +476,10 @@ TObjectPtr<const UAbilitySet> AbilitySetForMagicCircle //赋予魔法阵实例�
 + 每次将 AbilitySet 赋予 OwnerASC 时，必须保存对应的 FAbilitySet_GrantedHandles。卸载时仅通过这组句柄回收本次授予的 GA、GE 和 AttributeSet，不能按 Ability 类或 InputTag 做全局清理。
 + 授予部署 GA 时，将本次装备的 MagicCircleDefinition CDO 作为 AbilitySpec 的 SourceObject。部署 GA 激活后读取该快照，而不是再次读取 EquippedMagicCircle；这样在施法过程中切换快捷栏也不会改变本次施法的定义。
 + Input Mapping 不是网络状态，只能由本地受控玩家的 Enhanced Input Local Player Subsystem 安装和移除。服务器复制 EquippedMagicCircle，客户端在 OnRep_EquippedMagicCircle 中对齐本地输入状态。
-+ MagicCircleDefinition 中的 InputMapping 仅用于该魔法阵特有的附加输入；
++ MagicCircleDefinition 中的 DeploymentInputMapping 仅用于该魔法阵特有的附加输入；
 + 本组件卸载的是“玩家持有的部署能力”和预部署表现，不默认销毁已生成的 MagicCircleInstance。已生成实例是否在施法者切换魔法阵、卸下法杖或死亡时销毁，由实例自身的生命周期策略明确决定。
++ MagicCircleManagerComponent 不直接实现预览位置和目标计算。管理器提供非复制的 `OnMagicCircleDefinitionChanged` 装备变化通知，参数为当前 Definition 类，卸载时传入空值；服务器装备/卸载以及客户端 `OnRep_EquippedMagicCircle` 对齐状态后都触发该通知。
++ MagicCircleDeployComponent 在初始化时监听该通知，并根据 Definition 的 `bIsPreDeploy` 和 `PreviewActor` 创建或清理预部署预览。管理器只负责发布装备状态，预览生命周期仍由 DeployComponent 负责。
 
 ## 成员
 变量：
@@ -489,6 +491,8 @@ FAbilitySet_GrantedHandles EquippedAbilitySetHandles //仅服务器保存；记�
 
 FInputMappingContextAndPriority AppliedInputMapping //仅本地保存；记录当前实际加入 Local Player Subsystem 的映射，供卸载时精确移除
 
+DECLARE_MULTICAST_DELEGATE_OneParam(FMagicCircleDefinitionChanged, TSubclassOf<UMagicCircleDefinition>);
+FMagicCircleDefinitionChanged OnMagicCircleDefinitionChanged //非复制；当前 Definition 变化时通知本 Pawn 上的 DeployComponent
 
 函数：
 
@@ -513,13 +517,15 @@ void RemoveInputMappingForLocalPlayer();
 UFUNCTION()
 void OnRep_EquippedMagicCircle(TSubclassOf<UMagicCircleDefinition> PreviousMagicCircle);
 
+DeployComponent 在 BeginPlay 绑定 `OnMagicCircleDefinitionChanged`，在 EndPlay 解除绑定。委托传入当前 Definition 类，卸载时传入空值；DeployComponent 以实际本地状态为准，不依赖 PreviousMagicCircle。
+
 ## 装备流程
 
 1. MagicCircleQuickBarComponent 选中槽位后，向服务器请求装备该 MagicCircleDefinition。
 2. 服务器验证该 Definition 属于该玩家的可用槽位、玩家状态允许切换，且与当前装备不同；验证失败时不改变状态。
 3. 若已有当前装备，先调用 UnequipMagicCircle：取消仍在进行的玩家侧部署/瞄准能力，调用 EquippedAbilitySetHandles.TakeFromAbilitySystem(OwnerASC) 回收旧 AbilitySet，然后清空服务器侧句柄和 EquippedMagicCircle。
 4. 服务器从新 Definition 类获取 CDO，调用其 AbilitySet.GiveToAbilitySystem(OwnerASC, &EquippedAbilitySetHandles, SourceObject)，其中 SourceObject 为该 Definition CDO；随后设置 EquippedMagicCircle 并复制该状态。
-5. 本地受控玩家在状态变更后安装所需输入映射，并创建或更新本地预部署轮廓。若 Pawn、Controller 或 Local Player Subsystem 尚未就绪，则延迟到它们就绪后执行，不在远端 Pawn 上安装映射或预览。
+5. 本地受控玩家在状态变更后安装所需 DeploymentInputMapping，并通过 `OnMagicCircleDefinitionChanged` 通知 DeployComponent 创建或更新本地预部署轮廓。若 Pawn、Controller 或 Local Player Subsystem 尚未就绪，则延迟到它们就绪后执行，不在远端 Pawn 上安装映射或预览。
 
 ## 卸载流程
 
@@ -544,82 +550,35 @@ void OnRep_EquippedMagicCircle(TSubclassOf<UMagicCircleDefinition> PreviousMagic
 
 ## 设计边界
 
-+ 只有本地控制的 Pawn 创建和更新 PreDeployMagicCircle；预览 Actor 不复制、不造成伤害，也不参与真实魔法阵的战斗逻辑。
-+ MagicCircleManagerComponent 在装备需要预部署的 MagicCircleDefinition 后，调用 HandleMagicCirclePreDeploy 创建预览；切换、卸载、死亡、失去控制权或 Pawn 销毁时清理旧预览。
-+ 预览位置的距离基于玩家相机，而不是玩家角色。默认位置可以按“相机位置 + 相机瞄准方向 * DistanceFromCamera”计算，再由部署策略进行射线检测、贴地、表面法线对齐或其它修正。
-+ 预览更新可以由组件驱动，也可以由 PreDeployMagicCircle 自身 Tick 驱动，但目标计算规则必须由部署策略统一提供，PreDeployMagicCircle 只负责显示。
-+ 玩家激活 MalogicGA_MagicDeploy 时，GA 从该组件获取当前部署目标，立即复制为 TargetData 快照并提交给服务器。之后预览 Actor 的继续移动、装备切换或输入变化不得修改已经提交的部署请求。
-+ 服务器需要重新验证 TargetData 的魔法定义、距离、视线、可部署表面、目标和资源状态，验证通过后才生成并初始化 MagicCircleInstance。
++ 只有本地控制的 Pawn 创建和更新 PreDeployMagicCircle；
++ MagicCircleManagerComponent 在装备状态变化时通过 `OnMagicCircleDefinitionChanged` 传递当前 MagicCircleDefinition；DeployComponent 根据 Definition 的 `bIsPreDeploy`、`PreviewActor`、`BaseMaxDeployDistance` 和 `DeployStrategy` 创建或清理预览。切换、卸载、死亡、失去控制权或 Pawn 销毁时清理旧预览。
++ 预览位置的距离基于玩家相机或玩家角色，这由。默认位置可以按“起源位置 + 起源瞄准方向 * DistanceFromCamera”计算，再由部署策略进行射线检测、贴地、表面法线对齐或其它修正。
++ 部署位置计算规则由成员DeployStrategy决定，MagicCirclePreview 只负责显示。
++ 预览更新主要由组件在计算好部署位置后驱动更新（修改MagicCirclePreview的Transform）。
++ 玩家激活 MalogicGA_MagicDeploy 时，GA 从该组件获取当前MagicCirclePreview的Transform（判断bCanBeDeployed），立即复制为 TargetData 快照并提交给服务器。之后预览 Actor 的继续移动、装备切换或输入变化不得修改已经提交的部署请求。
 
 ## 输入约定
 
-部署距离的增加、减少以及其它预部署操作使用初始 InputConfig 和 HeroComponent 完成 NativeAction 到组件回调的绑定。MagicCircleDefinition 中的 InputMapping 只负责在装备该魔法阵时动态调整按键到既有 InputAction 的映射。
+部署距离的增加、减少以及其它预部署操作使用初始 InputConfig 和 HeroComponent 完成 NativeAction 到组件回调的绑定。MagicCircleDefinition 中的 DeploymentInputMapping 只负责在装备该魔法阵时动态调整按键到既有 InputAction 的映射。
 
-如果某个 MagicCircleDefinition 使用了新的 InputAction，则该 InputAction 必须在初始 InputConfig 中完成回调绑定，或者由输入系统提供成对的动态绑定和解绑；仅添加 InputMapping 不会自动创建回调。切换或卸载魔法阵时必须移除旧的映射，避免多个 Definition 同时响应同一输入。
-
-## 成员
-
-变量：
-
-TObjectPtr<AActor> PreDeployMagicCircle //本地预部署预览 Actor
-
-float DistanceFromCamera //相对于玩家相机的当前部署距离
-
-float MinDeployDistance //部署距离下限
-
-float MaxDeployDistance //部署距离上限
-
-float DeployDistanceStep //每次调整的距离步长
-
-TObjectPtr<UMagicCircleDeployStrategy> DeployStrategy //当前魔法阵的部署目标计算策略
-
-FMagicCircleDeployTarget CurrentDeployTarget //最近一次本地目标计算结果
-
-uint32 PreviewGeneration //用于忽略旧预览或异步回调
-
-## 函数
-
-public：
-
-void HandleMagicCirclePreDeploy(TSubclassOf<AActor> MagicCirclePreview, float DefaultDistance)
-
-+ 仅本地控制端执行；销毁旧预览并创建新的 PreDeployMagicCircle。
-+ 将 DistanceFromCamera 初始化为 DefaultDistance，并根据当前 MagicCircleDefinition 初始化 DeployStrategy。
-+ 创建后立即计算一次预览位置，避免等待下一帧时出现空目标。
-
-void UpdatePreDeployMagicCircle(float DeltaTime)
-
-+ 根据相机位置、瞄准方向、DistanceFromCamera 和 DeployStrategy 更新预览。
-+ 同步更新 CurrentDeployTarget；无效目标不能作为部署请求提交。
-
-void IncreaseDeployDistance()
-
-void DecreaseDeployDistance()
-
-void SetDeployDistance(float NewDistance)
-
-+ 将距离限制在 MinDeployDistance 和 MaxDeployDistance 范围内。
-
-bool GetCurrentDeployTarget(FMagicCircleDeployTarget& OutTarget) const
-
-+ 返回可被 GA 捕获的当前目标快照来源。
-+ 返回的数据至少包括部署 Transform、命中信息、目标 Actor（如果有）以及目标是否有效。
-
-void ClearPreDeployMagicCircle()
-
-+ 在切换、卸载、死亡、失去控制权或服务器确认部署成功后销毁预览并清理当前目标。
-+ 部署失败或服务器拒绝时不调用该函数，保留预览供玩家修正后重试。
+如果某个 MagicCircleDefinition 使用了新的 InputAction，则该 InputAction 必须在初始 InputConfig 中完成回调绑定，或者由输入系统提供成对的动态绑定和解绑；仅添加 DeploymentInputMapping 不会自动创建回调。切换或卸载魔法阵时必须移除旧的映射，避免多个 Definition 同时响应同一输入。
 
 ## 部署策略
 
-不同的魔法阵可以使用不同的 MagicCircleDeployStrategy，例如：
+当前阶段使用枚举 `EMagicCircleDeployStrategy` 描述部署方式。该枚举由 MagicCircleDefinition 保存，DeployComponent 在更新预览时根据枚举选择对应的目标计算分支。
 
-+ 地面部署：从相机发出射线，使用命中点和表面法线计算位置与旋转。
-+ 前方部署：根据相机方向和距离计算目标，并限制与玩家的相对位置。
-+ 目标部署：从射线或锁定系统获取目标 Actor，再根据目标位置计算部署 Transform。
-+ 即时施放：不创建预部署预览，由部署 GA 直接构建目标数据。
+```cpp
+UENUM(BlueprintType)
+enum class EMagicCircleDeployStrategy : uint8
+{
+	CameraRaycast,  // 从相机发出射线，使用命中点和表面法线计算部署位置与旋转。
+	CameraForward,  // 以相机位置和瞄准方向计算部署位置。
+	PawnForward     // 以玩家角色位置和朝向计算部署位置，不以相机为中心。
+};
+```
+UpdatePreDeployMagicCircle函数中会根据DeployStrategy成员，进行不同的计算逻辑以更新MagicCirclePreview的位置。
 
-MagicCircleDeployComponent 只管理预览生命周期和通用输入状态，具体的射线检测、目标过滤、表面约束和旋转规则由策略负责，避免组件随着魔法类型增加而堆积分支。MagicCircleDefinition 需要保存该魔法阵所使用的部署策略类型及其参数。
+当前需求下不单独创建 `UMagicCircleDeployStrategy` UObject，避免为了尚未明确的策略差异引入额外运行时对象和初始化接口。后续如果策略参数或目标过滤逻辑显著复杂，再将枚举分支迁移为独立策略类。
 
 ## 生命周期
 
@@ -627,9 +586,63 @@ MagicCircleDeployComponent 只管理预览生命周期和通用输入状态，�
 
 + 装备需要预部署的 Definition：创建并显示预览。
 + 装备不需要预部署的 Definition：销毁预览，部署由对应策略或 GA 直接处理。
-+ GA 激活：捕获 CurrentDeployTarget 的不可变快照并提交 TargetData。
++ GA 激活：捕获 MagicCirclePreview 位置并提交 TargetData。
 + 服务器确认部署成功：清理预览。
 + 部署失败或服务器拒绝：保留预览，并允许玩家重新调整距离或目标后再次提交。
+
+## 成员
+
+变量：
+
+TObjectPtr<AActor> MagicCirclePreview //本地预部署预览 Actor
+
+float DistanceFromSource //相对于基准点的当前部署距离
+
+//float MinDeployDistance = 1.0f //部署距离下限；没有部署距离下限，大于等于0即可。
+
+float BaseMaxDeployDistance //基础部署距离上限，在Deployment根据魔法阵定义，以及玩家状态计算出的当前实际部署距离
+
+float MaxDeployDistanceRatio = 1.0f //部署距离上限的系数，如果有武器或者其它buff修改则直接修改这个值
+
+float DeployDistanceStep = 10.f //每次调整的距离步长，这是硬编码的固定值，不会随游戏逻辑发生变化
+
+EMagicCircleDeployStrategy DeployStrategy //当前魔法阵的部署目标计算策略
+
+bool bCanBeDeployed //当前Preview位置是否能部署魔法阵
+
+## 函数
+
+public：
+
+void HandleMagicCirclePreDeploy(TSubclassOf<UMagicCircleDefinition> MagicCircleDefinition)
++ 仅本地控制端执行；销毁旧预览并创建新的 PreDeployMagicCircle。
++ 从 Definition CDO 读取 `bIsPreDeploy`、`PreviewActor`、`BaseMaxDeployDistance` 和 `DeployStrategy`；不需要预部署或没有 PreviewActor 时直接清理并返回。
++ 将成员BaseMaxDeployDistance 初始化为 Definition 的 BaseMaxDeployDistance（或许该项还会根据别的状态也做出覆写），并根据当前状态更新MaxDeployDistanceRatio
++ 保存当前 DeployStrategy。
++ 创建后立即计算一次预览位置，避免等待下一帧时出现空目标。
+
+void UpdatePreDeployMagicCircle(float DeltaTime)
++ 根据相机位置、瞄准方向、DistanceFromCamera 和 DeployStrategy 更新预览；其中 `CameraRaycast`、`CameraForward` 和 `PawnForward` 分别执行对应的目标计算规则。
++ 同步更新 CurrentDeployTarget；无效目标不能作为部署请求提交。
+
+void IncreaseDeployDistance()
++ 根据DeployDistanceStep增加一次DistanceFromSource
+
+void DecreaseDeployDistance()
++ 根据DeployDistanceStep减少一次DistanceFromSource
+
+void ClampDeployDistance(float NewDistance)
+
++ 将距离限制在 MinDeployDistance 和 MaxDeployDistance 范围内。
+
+void ClearPreDeployMagicCircle()
+
++ 在切换、卸载、死亡、失去控制权或服务器确认部署成功后销毁预览并清理当前目标。
++ 部署失败或服务器拒绝时不调用该函数，保留预览供玩家修正后重试。
+
+## 注意事项
+部署位置是否有效合理非常重要，可以成功部署的魔法阵一定不会被当帧中静态物体所阻碍施法
+
 
 # MagicCircleQuickBarComponent
 ## 概述
@@ -647,16 +660,30 @@ MagicCircleDeployComponent 只管理预览生命周期和通用输入状态，�
 
 ## 成员
 
-private:
+```cpp
+UPROPERTY(EditDefaultsOnly)
+int32 NumSlots = 3;
 
-UPROPERTY(ReplicatedUsing=OnRep_Slots)
-TArray<TSubclassOf<UMagicCircleDefinition>> Slots;
+UPROPERTY(ReplicatedUsing = OnRep_Slots)
+TArray<TSubclassOf<UMalogicMagicCircleDefinition>> Slots;
 
-UPROPERTY(ReplicatedUsing=OnRep_ActiveSlotIndex)
-int32 ActiveSlotIndex = -1;
+UPROPERTY(ReplicatedUsing = OnRep_ActiveSlotIndex)
+int32 ActiveSlotIndex = INDEX_NONE;
+
+UPROPERTY(BlueprintAssignable)
+FMagicCircleQuickBarSlotsChanged OnSlotsChanged;
+
+UPROPERTY(BlueprintAssignable)
+FMagicCircleQuickBarActiveSlotChanged OnActiveSlotIndexChanged;
+```
+
+`Slots` 与 `ActiveSlotIndex` 使用普通组件复制，不限制为 OwnerOnly，为其它客户端观察选择状态和后续扩展保留数据。快捷栏只保存和复制 `TSubclassOf<UMalogicMagicCircleDefinition>`；需要读取配置时使用对应类的 CDO。
+
+`OnSlotsChanged` 向 UI 提供完整槽位数组，`OnActiveSlotIndexChanged` 提供当前索引。服务器的显式修改和客户端的 `OnRep` 都会触发对应委托，UI 可直接绑定。
 
 函数：
 
+```cpp
 UFUNCTION(Server, Reliable, BlueprintCallable)
 void SetActiveSlotIndex(int32 NewIndex);
 
@@ -667,25 +694,42 @@ UFUNCTION(BlueprintCallable)
 void CycleActiveSlotBackward();
 
 UFUNCTION(BlueprintPure)
-TSubclassOf<UMagicCircleDefinition> GetActiveSlotMagicCircle() const;
+TSubclassOf<UMalogicMagicCircleDefinition> GetActiveSlotMagicCircle() const;
 
 UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-void SetSlot(int32 SlotIndex, TSubclassOf<UMagicCircleDefinition> MagicCircleDefinition);
+void AddToSlot(int32 SlotIndex, TSubclassOf<UMalogicMagicCircleDefinition> MagicCircleDefinition);
 
 UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-void ClearSlot(int32 SlotIndex);
+TSubclassOf<UMalogicMagicCircleDefinition> RemoveFromSlot(int32 SlotIndex);
+```
 
+私有流程函数：
+
+```cpp
+void EquipMagicCircleInSlot();
+void UnequipMagicCircleInSlot();
+UMagicCircleManagerComponent* FindMagicCircleManager() const;
+```
+
+快捷栏负责当前槽位的装备编排：`EquipMagicCircleInSlot` 从当前槽位读取 Definition，再调用 Pawn 上 Manager 的 `EquipMagicCircle`；`UnequipMagicCircleInSlot` 调用 Manager 的 `UnequipMagicCircle`。Manager 仍是 AbilitySet、输入映射和实际装备状态的唯一所有者。
+
+`AddToSlot` 与 `UMalogicQuickBarComponent::AddItemToSlot` 语义一致：只允许向有效的空槽写入非空 Definition，已有槽位不会被覆盖。替换槽位必须先调用 `RemoveFromSlot`。
+
+`RemoveFromSlot` 与 `UMalogicQuickBarComponent::RemoveItemFromSlot` 语义一致：返回被移除的 Definition；无效或空槽返回 `nullptr`。清除当前激活槽位时，先卸载魔法阵，将 `ActiveSlotIndex` 重置为 `INDEX_NONE`，再清空槽位。
+
+```cpp
 UFUNCTION()
 void OnRep_Slots();
 
 UFUNCTION()
 void OnRep_ActiveSlotIndex();
+```
 
 ## 切换流程
 
 1. 本地输入请求 `SetActiveSlotIndex`。
 2. 服务器校验索引和槽位内容。
-3. 服务器更新 `ActiveSlotIndex`，先让管理器卸载旧魔法阵，再装备新槽位的 Definition。
+3. 服务器调用 `UnequipMagicCircleInSlot`，更新 `ActiveSlotIndex`，再调用 `EquipMagicCircleInSlot`；两个辅助函数通过 Pawn 上的 `MagicCircleManagerComponent` 卸载旧 Definition 并装备新槽位的 Definition。
 4. 复制索引和槽位变化；客户端在 `OnRep` 中刷新 UI、预部署轮廓和本地输入表现。
 
 ## 设计边界
