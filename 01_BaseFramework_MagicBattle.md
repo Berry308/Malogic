@@ -737,7 +737,7 @@ void OnRep_ActiveSlotIndex();
 + `Slots` 只保存 `TSubclassOf<UMagicCircleDefinition>`，不保存 `TObjectPtr<UMagicCircleDefinition>` 运行时对象。
 + Definition 不保存充能、升级、符文、耐久等实例状态；如果未来出现这些需求，再单独引入 MagicCircleItemInstance，而不是修改 Definition 的职责。
 
-# MagicWeapon
+# MagicWeaponInstance
 ## 概述
 基类：WeaponInstance
 
@@ -745,16 +745,19 @@ void OnRep_ActiveSlotIndex();
 
 提供施放魔法相关的一些属性，如施法距离。
 
-在装备武器的时候，注入 EquipmentInstance 的 InputMapping。（此前需要对 EquipmentInstance 做一些修改）
+在装备武器的时候，注入指定的InputMapping。（此处需要对InputMapping的获取方式做设计）
 
 在卸载武器的时候，卸载对应的 InputMapping。
+
+## 武器实例的输入映射获取及注入
+首先自定义InventoryFragment_InputMapping。其中定义了一个成员TSoftPtr<UInputMappingContext> InputMappingContext(这里需要用软指针么)
+在EquipmentInstance中，有成员UObject* Instigator，它通常在QuickBarComponent中装备Equipment时，被设置为InventoryItemInstance* SlotItem。可以通过InventoryItemInstance类中定义的FindFragmentByClass函数找到对应的Frgament。
+所以在MagicWeaponInstance中，重写OnEquipped函数，调用父类逻辑Super，然后调用Instigator的FindFragmentByClass函数找到InventoryFragment_InputMapping，调用GetPawn获取到持有该武器实例的Pawn并且添加InputMapping。
 
 ## 成员
 变量：
 
-TObjectPtr<UActivatableWidget> QuickMagicBar //快捷魔法栏
-
-float DeployDistanceRatio //部署魔法距离上限加成系数
+float DeployDistanceRatio = 1.0f //部署魔法距离上限加成系数
 
 函数：
 

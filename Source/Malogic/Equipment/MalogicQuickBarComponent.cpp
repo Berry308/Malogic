@@ -72,9 +72,7 @@ void UMalogicQuickBarComponent::EquipItemInSlot()
 			{
 				if (UMalogicEquipmentManagerComponent* EquipmentManager = FindEquipmentManager())
 				{
-					EquippedItem = EquipmentManager->EquipItem(EquipDef);
-					//EquipmentInstance需要通过Instigator来找到对应的InventoryItemInstance，InventoryItemInstance存储了Stat Tag Stack及一些库存状态
-					if (EquippedItem != nullptr) EquippedItem->SetInstigator(SlotItem);
+					EquippedItem = EquipmentManager->EquipItemWithInstigator(EquipDef, SlotItem);
 				}
 			}
 		}

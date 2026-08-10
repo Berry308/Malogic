@@ -25,7 +25,7 @@ public:
 	UFUNCTION(BlueprintPure, Category=Equipment)
 	UObject* GetInstigator() const { return Instigator; }
 	//通常设置为QuickBarComp上某个插槽的UMalogicInventoryItemInstance，Stat Tag Stack在UMalogicInventoryItemInstance上，需要通过Instigator扣除弹药数量
-	void SetInstigator(UObject* InInstigator) { Instigator = InInstigator; }
+	void SetInstigator(UObject* InInstigator);
 
 	UFUNCTION(BlueprintPure, Category=Equipment)
 	APawn* GetPawn() const;
@@ -48,6 +48,7 @@ public:
 	virtual void OnUnequipped();
 
 protected:
+	virtual void OnInstigatorChanged() {}
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Animation")
 	TSubclassOf<UAnimInstance> ThirdPersonAnimInstanceClass;

@@ -9,6 +9,7 @@
 #include "MalogicEquipmentManagerComponent.generated.h"
 
 class UActorComponent;
+class UObject;
 class UMalogicAbilitySystemComponent;
 class UMalogicEquipmentDefinition;
 class UMalogicEquipmentInstance;
@@ -90,6 +91,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	UMalogicEquipmentInstance* EquipItem(TSubclassOf<UMalogicEquipmentDefinition> EquipmentDefinition);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
+	UMalogicEquipmentInstance* EquipItemWithInstigator(TSubclassOf<UMalogicEquipmentDefinition> EquipmentDefinition, UObject* InInstigator);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
 	void UnequipItem(UMalogicEquipmentInstance* ItemInstance);

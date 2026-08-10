@@ -35,6 +35,15 @@ void UMalogicEquipmentInstance::GetLifetimeReplicatedProps(TArray<FLifetimePrope
 	DOREPLIFETIME(ThisClass, SpawnedActors);
 }
 
+void UMalogicEquipmentInstance::SetInstigator(UObject* InInstigator)
+{
+	if (Instigator != InInstigator)
+	{
+		Instigator = InInstigator;
+		OnInstigatorChanged();
+	}
+}
+
 APawn* UMalogicEquipmentInstance::GetPawn() const
 {
 	return Cast<APawn>(GetOuter());
@@ -121,6 +130,7 @@ void UMalogicEquipmentInstance::OnUnequipped()
 
 void UMalogicEquipmentInstance::OnRep_Instigator()
 {
+	OnInstigatorChanged();
 }
 
 //TSubclassOf<UAnimInstance> UMalogicEquipmentInstance::GetFirstPersonAnimInstanceClass() const

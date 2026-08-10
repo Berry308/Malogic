@@ -127,12 +127,18 @@ void UMalogicEquipmentManagerComponent::GetLifetimeReplicatedProps(TArray<FLifet
 
 UMalogicEquipmentInstance* UMalogicEquipmentManagerComponent::EquipItem(TSubclassOf<UMalogicEquipmentDefinition> EquipmentClass)
 {
+	return EquipItemWithInstigator(EquipmentClass, nullptr);
+}
+
+UMalogicEquipmentInstance* UMalogicEquipmentManagerComponent::EquipItemWithInstigator(TSubclassOf<UMalogicEquipmentDefinition> EquipmentClass, UObject* InInstigator)
+{
 	UMalogicEquipmentInstance* Result = nullptr;
 	if (EquipmentClass != nullptr)
 	{
 		Result = EquipmentList.AddEntry(EquipmentClass);
 		if (Result != nullptr)
 		{
+			Result->SetInstigator(InInstigator);
 			Result->OnEquipped();
 			if (IsUsingRegisteredSubObjectList() && IsReadyForReplication())
 			{
