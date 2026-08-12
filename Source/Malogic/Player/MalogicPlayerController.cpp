@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "Player/MalogicPlayerState.h"
+#include "Weapon/MagicWeaponStateComponent.h"
 
 AMalogicPlayerController::AMalogicPlayerController(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)

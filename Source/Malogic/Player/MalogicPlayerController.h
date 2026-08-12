@@ -66,6 +66,7 @@ private:
 	void BroadcastOnPlayerStateChanged();
 
 private:
+
 	UPROPERTY()
 	TObjectPtr<APlayerState> LastSeenPlayerState;
 };

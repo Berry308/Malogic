@@ -3,6 +3,7 @@
 ## Project Overview
 
 Malogic is an Unreal Engine 5.6.1 game project(Based on UE Lyra).
+Local Based-on Lyra framework project's path: E:\Unreal Projects\MazeRunner(Used to reference)
 
 - Project file: `Malogic.uproject`
 - Main runtime module: `Source/Malogic`
@@ -15,6 +16,8 @@ Malogic is an Unreal Engine 5.6.1 game project(Based on UE Lyra).
   - UnLua plugins and Lua staging support
 
 When working in this repository, prefer the existing project patterns over introducing new architecture.
+
+
 
 ## Repository Boundaries
 

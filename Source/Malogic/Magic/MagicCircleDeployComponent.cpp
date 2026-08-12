@@ -76,7 +76,11 @@ void UMagicCircleDeployComponent::HandleMagicCirclePreDeploy(TSubclassOf<UMalogi
 	APawn* Pawn = GetPawn<APawn>();
 	if (!Pawn || !Pawn->IsLocallyControlled()) return;
 
-	if (!MagicCircleDefinition) return;
+	if (!MagicCircleDefinition)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleDeployComponent [%s] received a null magic circle definition."), *GetNameSafe(this));
+		return;
+	}
 
 
 	CurrentMagicCircleDefinition = MagicCircleDefinition;
@@ -93,8 +97,16 @@ void UMagicCircleDeployComponent::HandleMagicCirclePreDeploy(TSubclassOf<UMalogi
 	DeployStrategy = Definition->DeployStrategy;
 	DistanceFromSource = GetMaxDeployDistance();
 
-	if (!Definition->bIsPreDeploy || !Definition->PreviewActor)
+	if (!Definition->bIsPreDeploy)
 	{
+		bCanBeDeployed = true;
+		return;
+	}
+
+	if (!Definition->PreviewActor)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleDeployComponent received a definition [%s] without a valid PreviewActor."), *GetNameSafe(Definition));
+		CurrentMagicCircleDefinition = nullptr;
 		return;
 	}
 
@@ -193,13 +205,21 @@ void UMagicCircleDeployComponent::ClearPreDeployMagicCircle()
 
 bool UMagicCircleDeployComponent::GetCurrentDeployTransform(FTransform& OutTransform) const
 {
-	if (!bCanBeDeployed || !IsValid(MagicCirclePreview))
+	if (!bCanBeDeployed)
 	{
 		return false;
 	}
 
-	OutTransform = CurrentDeployTransform;
-	return true;
+	if (IsValid(MagicCirclePreview))
+	{
+		OutTransform = CurrentDeployTransform;
+		return true;
+	}
+
+	FVector SourceLocation;
+	FVector SourceDirection;
+	return GetDeploymentSource(SourceLocation, SourceDirection)
+		&& CalculateDeployTransform(SourceLocation, SourceDirection, OutTransform);
 }
 
 void UMagicCircleDeployComponent::SetMaxDeployDistanceRatio(float NewRatio)
@@ -238,7 +258,6 @@ void UMagicCircleDeployComponent::HandlePawnDeathStarted(AActor* OwningActor)
 	ClearPreDeployMagicCircle();
 }
 
-	//当Controller发生变化时，MagicCircleManager作为PawnComponent应该按理说会跟随Pawn被销毁了
 bool UMagicCircleDeployComponent::GetDeploymentSource(FVector& OutLocation, FVector& OutDirection) const
 {
 	const APawn* Pawn = GetPawn<APawn>();

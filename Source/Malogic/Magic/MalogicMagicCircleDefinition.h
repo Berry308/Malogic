@@ -8,6 +8,7 @@
 #include "UObject/NoExportTypes.h"
 #include "MalogicMagicCircleDefinition.generated.h"
 
+class AMagicCircleViewActor;
 class AMalogicMagicCircleInstance;
 
 UENUM(BlueprintType)
@@ -41,6 +42,9 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
 	TSubclassOf<AActor> PreviewActor;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
+	TSubclassOf<AMagicCircleViewActor> ViewActorForPrediction;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (ClampMin = "0.0", FormerlySerializedAs = "DefaultDistance"))
 	float BaseMaxDeployDistance = 1000.0f;

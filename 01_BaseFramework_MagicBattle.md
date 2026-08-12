@@ -439,6 +439,8 @@ float BaseBuildingTime //魔法阵构建的基本时间，在MalogicGA_(MagicNam
 
 TSubclassOf<AActor> PreviewActor //预部署时显示的本地轮廓 Actor 类型
 
+TSubclassOf<AActor> ViewActorForPrediction //用于客户端预测画面表现生成的轻量Actor
+
 float BaseMaxDeployDistance //魔法阵最大释放距离
 
 TObjectPtr<const UAbilitySet> AbilitySetForPlayer //赋予玩家部署该魔法阵的能力
@@ -759,42 +761,227 @@ void OnRep_ActiveSlotIndex();
 
 float DeployDistanceRatio = 1.0f //部署魔法距离上限加成系数
 
-函数：
+float MagicCircleBuildingRate = 1.0f //魔法阵的构建速度，受魔法武器加成
+
+## 函数
 
 OnEquipped()
 
 OnUnEquipped()
 
-# MalogicGA_(DeployMethod)Deploy
+# MagicCircleViewActor
+基类：AActor（建议类名为 `AMagicCircleViewActor`）
+职责：
++ 作为客户端预测期间的轻量视觉 Actor，只包含魔法阵必要的 Mesh、动画和其它表现组件。
++ 仅在本地控制客户端生成，`bReplicates = false`；它不持有 ASC、不参与碰撞判定，也不包含任何权威游戏逻辑。
++ 在客户端生成时设置ActualBuildingTime，以便蓝图中自动处理动画播放速率。
++ `PreviewActor` 用于施法前的落点预览，`ViewActorForPrediction` 用于提交 TargetData 后、收到服务器确认前的构建表现；两者不能混用。
+
+# 成员变量
+UPROPERTY()
+float ActualBuildingTime; // 蓝图使用ActualBuildingTime/BaseBuildingTime作为AnimPlayRate指定动画播放速率。
+UPROPERTY(EditDefaultOnly)
+float BaseBuildingTime; // 魔法阵构建动画原始的播放所用时间
+
+# 成员函数
+
+# MagicWeaponStateComponent
+## 概述
+基类：UControllerComponent
+参考：UMaruWeaponStateComponent  文件路径：E:\Unreal Projects\MazeRunner\Source\MazeRunner\Weapons
+职责：
++ 主要负责魔法阵生成的预测与销毁，流程参考UMaruWeaponStateComponent
++ 在部署GA时，会调用该组件生成一个该魔法阵的视觉Actor（只包含MeshComponent和动画或其它），视觉Actor类的来源是MagicCircleDefinition的 `ViewActorForPrediction`。
++ 该组件通过一个FPredictiveViewActor数组维护当前玩家生成的所有视觉Actor
+
+## FPredictiveViewActor
+struct FPredictiveViewActor
+{
+	FPredictiveViewActor() { }
+
+	FPredictiveViewActor(uint16 InUniqueId) :
+		UniqueId(InUniqueId)
+	{ }
+
+	TWeakObjectPtr<AMagicCircleViewActor> ViewActor;
+
+	uint16 UniqueId = 0;
+};
+
+## 成员变量
+
+private：
+TArray<FPredictiveViewActor> UnconfirmedPredictiveViewActor;
+uint16 NextPredictiveViewId = 0;
+
+
+## 成员函数
+public:
+virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
++ 将来可能需要调用MagicWeaponInstance->Tick，现在先不做实现，预留该函数并添加注释
++ 构造函数调用 `SetIsReplicatedByDefault(true)`，以支持服务器向拥有该 Controller 的客户端发送确认 RPC；若暂时不需要超时回收，Tick 默认关闭。
+
+UFUNCTION(Client, Reliable)
+void ClientConfirmTargetData(uint16 UniqueId, bool bIsTargetDataValid);
++ 在MalogicGA_MagicDeploy的服务器OnTargetDataReadyCallback函数中进行调用，发送ClientRPC给客户端
++ 在此函数中，遍历UnconfirmedPredictiveViewActor数组找到匹配的UniqueId，然后对该ViewActor进行直接销毁
++ 无论服务器接受还是拒绝，都移除对应的预测记录；该 RPC 只结束本地预测视觉，不决定权威游戏结果。
++ 该函数不销毁 `MagicCircleDeployComponent` 持有的施法前 `PreviewActor`；是否在服务器接受部署后清理施法前预览，仍由部署组件的既有流程负责。
+
+void AddUnconfirmedPredictiveViewActor(const FGameplayAbilityTargetDataHandle& InTargetData, TSubclassOf<AMagicCircleViewActor> ViewActor, float PredictedBuildingTime);
++ `TargetData.UniqueId` 由组件的单调递增 `uint16 NextPredictiveViewId` 分配，不能以 `UnconfirmedPredictiveViewActor.Num()` 作为 ID，以避免确认消息提前到达后产生重复 ID。
++ FPredictiveViewActor& NewUnconfirmedViewActor = UnconfirmedPredictiveViewActor.Emplace_GetRef(InTargetData.UniqueId);
++ 根据TargetData中的数据，在指定位置生成ViewActor，并且传入BuildingTime以决定魔法阵动画的播放速度。
++ 服务器未确认、能力取消、Controller/Pawn 生命周期结束时都必须销毁仍未确认的 ViewActor，避免留下本地表现。
+
+uint16 AllocatePredictiveViewId();
++ 返回当前 `NextPredictiveViewId` 后递增；`StartDeploymentTargeting` 在创建 TargetData 后、添加预测 ViewActor 前执行 `TargetData.UniqueId = AllocatePredictiveViewId()`。
+
+int32 GetUnconfirmedPredictiveViewActorCount() const
+{
+	return UnconfirmedPredictiveViewActor.Num();
+}
+
+# MalogicGATargetData_MagicCircleSpawnInfo
+基类：FGameplayAbilityTargetData_LocationInfo
+参考：FMRGameplayAbilityTargetData_SingleTargetHit  路径：E:\Unreal Projects\MazeRunner\Source\MazeRunner\AbilitySystem
+定义在MalogicGA_MagicCircleDeploy.h中。
+
+成员：
+//float MagicCircleBuildingTime //此项已经被注释，服务器会主动再计算一次BuildingTime以保证逻辑正确。不需要客户端计算该参数并且传递。
+
+`FGameplayAbilityTargetData_LocationInfo` 的 `SourceLocation` 和 `TargetLocation` 均可使用 `LiteralTransform`；部署请求将部署源变换写入 `SourceLocation`，将客户端计算出的完整部署变换写入 `TargetLocation`。服务器从 `GetOrigin()` 和 `GetEndPointTransform()` 读取，不接受任何客户端构建时间作为权威值。
+
+即使当前没有额外字段，派生 TargetData 仍需重写 `GetScriptStruct()` 返回 `FMalogicGATargetData_MagicCircleSpawnInfo::StaticStruct()`，并实现 `NetSerialize()`（先调用父类序列化）及 `TStructOpsTypeTraits` 的 `WithNetSerializer = true`。否则 GAS 网络传输后只会还原为基类，服务器无法可靠识别此部署 TargetData 类型。
+
+
+# MalogicGA_MagicCircleDeploy
 ## 概述
 基类：UMalogicGameplayAbility
 
 职责：
-
++ 作为所有用于部署魔法阵的GameplayAbility的基类
++ 继承 `UMalogicGameplayAbility` 的 `InstancedPerActor` 与 `LocalPredicted` 默认网络策略：本地控制端负责采样、预测和发送 TargetData，服务器执行验证、Commit 与 Actor 生成；子类不得改为 `ServerOnly`。
 + 从自身 AbilitySpec 的 `SourceObject` 获取本次施法绑定的 MagicCircleDefinition CDO，不重新查询 MagicCircleManagerComponent 的当前装备；
 + 根据部署策略进行射线检测、目标过滤、位置约束和朝向计算；
 + 读取 Definition 的 `BaseBuildingTime`，结合 MagicWeapon 属性、GameplayEffect、GameplayTag 和其它状态计算 `ActualBuildingTime`；
 + 对 `ActualBuildingTime` 进行最小值和最大值限制，不能通过非法值绕过 `Building` 阶段；
 + 在服务器上使用 Deferred Spawn 创建 `AMalogicMagicCircleInstance`，并在 `FinishSpawning` 前传入 Definition、部署者、部署变换和 `ActualBuildingTime`；
-+ 验证部署请求的权限、距离、资源和目标数据，验证通过后才生成实例。
++ 验证部署请求的权限、资源和目标数据结构；服务器不根据 Definition 重新计算部署位置，只使用客户端提交的部署变换，并以 `DontSpawnIfColliding` 让真实魔法阵 Actor 的碰撞组件在生成时拒绝被阻挡的位置。
 
-函数：
+## 问题
++ 对于不同的魔法，存在不同的部署方式，如有的魔法需要发出射线检测获取命中点。部署 GA 可以复用，魔法阵实例类型和构建时间均从 Definition 和运行时参数获取，不能硬编码在 GA 中。
++ 怎么获取到MagicWeapon呢？在MazeRunner的设计中，UMaruGameplayAbility_FromEquipment通过SourceObject获取weaponinstance。
 
-`CalculateActualBuildingTime(const UMagicCircleDefinition* Definition)`
-+ 仅服务器调用；
+## 成员变量
+
+
+## 成员函数
+`构造函数`
+ActivationBlockedTags.AddTag(TAG_MagicWeaponFireBlocked);
++ `Ability.MagicWeapon.NoFiring` 是施法者 ASC 的状态标签，因此使用 `ActivationBlockedTags`；不要使用只检查外部传入 `SourceTags` 的 `SourceBlockedTags`。
+
+`const UMalogicMagicCircleDefinition* GetAssociatedDefinition(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo) const`
+{
+	return Cast<UMalogicMagicCircleDefinition>(GetSourceObject(Handle, ActorInfo));
+}
++ 在 `CanActivateAbility` 阶段也通过传入的 Handle 和 ActorInfo 读取 SourceObject，不能依赖仅在当前激活上下文中稳定的 `GetCurrentAbilitySpec()`。
+
+`virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags = nullptr, const FGameplayTagContainer* TargetTags = nullptr, OUT FGameplayTagContainer* OptionalRelevantTags = nullptr) const override`
++ bool bResult = Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
++ 判断GetAssociatedDefinition是否有效
++ 仅在本地控制端获取 AvatarActor 的 MagicCircleDeployComponent 并判断 `bCanBeDeployed`；它是本地预览状态，专用于避免发送显然无效的请求。
++ 服务器不依赖该组件状态，也不根据 Definition、相机或部署策略重新计算目标位置；在 `OnTargetDataReadyCallback` 中只检查 TargetData 数量、派生类型和终点 Transform 的基本有效性。资源、能力标签等通用 GAS 条件仍由 `CommitAbility` 统一处理。
++ return bResult
+
+`virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override`
++ 和MaruGameplayAbility_RangedWeapon::ActivateAbility一致
++ 首先使用 `(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey())` 绑定 `AbilityTargetDataSetDelegate` 到 `OnTargetDataReadyCallback`；服务器必须在客户端调用 `CallServerSetReplicatedTargetData` 前完成此绑定。
++ 获取到MagicWeaponInstance并更新开火时间
++ 然后调用 `Super`，并由本地控制端的原生代码或 Blueprint 调用 `StartDeploymentTargeting`；无论采用哪种入口，均不能早于 TargetData 委托绑定。
+
+`virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override`
+	if (IsEndAbilityValid(Handle, ActorInfo))
+	{
+		if (ScopeLockCount > 0)
+		{
+			WaitingToExecute.Add(FPostLockDelegate::CreateUObject(this, &ThisClass::EndAbility, Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled));
+			return;
+		}
+
+		UAbilitySystemComponent* MyAbilityComponent = CurrentActorInfo->AbilitySystemComponent.Get();
+		check(MyAbilityComponent);
+
+		// When ability ends, consume target data and remove delegate
+		MyAbilityComponent->AbilityTargetDataSetDelegate(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey()).Remove(OnTargetDataReadyCallbackDelegateHandle);
+		MyAbilityComponent->ConsumeClientReplicatedTargetData(CurrentSpecHandle, CurrentActivationInfo.GetActivationPredictionKey());
+
+		Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
+	}
++ 等待作用域锁释放，移除委托以及TargetData缓存。
+
+`virtual void CalculateDeployTransform()`
++ 计算魔法阵的部署位置
+
+`virtual void CalculateActualBuildingTime()`
++ 本地调用计算需要同步给视觉Actor以便正确播放魔法阵构建动画
++ 服务器验证时同样需要调用计算，用于MagicCircleInstance实际的数值填充
 + 以 Definition 的 `BaseBuildingTime` 为基础值；
 + 结合当前 MagicWeapon、来源 ASC 上的属性和标签，以及其它影响施法时间的状态计算最终值；
 + 返回经过限制后的 `ActualBuildingTime`。
++ 本地计算值仅为 `PredictedBuildingTime`，不通过 TargetData 发送，也不影响服务器结算；实例复制的 `ActualBuildingTime` 是唯一权威值，客户端收到实例后以其为准。
++ `SourceObject` 固定为 MagicCircleDefinition，不能用于取得 MagicWeaponInstance。应通过 Avatar Pawn 的装备管理器查询当前装备的 `UMalogicMagicWeaponInstance`；服务器以自身查询结果计算权威时间。
+
+`void StartDeploymentTargeting`
++ 参考ULyraGameplayAbility_RangedWeapon::StartRangedWeaponTargeting函数，只能客户端调用
++ 初始指针获取
++ 找到MagicWeaponStateComponent
++ 打开预测窗口FScopedPredictionWindow ScopedPrediction(MyAbilityComponent, CurrentActivationInfo.GetActivationPredictionKey());
++ 调用CalculateDeployTransform
++ 调用CalculateActualBuildingTime（本地也需要调用计算，进行客户端魔法阵构建动画表现的预测）
++ 构建MalogicGATargetData_MagicCircleSpawnInfo
++ 将部署源和完整部署变换分别写入 `SourceLocation.LiteralTransform` 与 `TargetLocation.LiteralTransform`，并将 `TargetData.UniqueId` 设为 `MagicWeaponStateComponent->AllocatePredictiveViewId()` 的结果。
++ 调用MagicWeaponStateComponent->AddUnconfirmedPredictiveViewActor
++ 调用OnTargetDataReadyCallback
 
 `SpawnMagicCircleInstance(const UMagicCircleDefinition* Definition, const FTransform& DeployTransform, float ActualBuildingTime)`
 + 仅服务器调用；
 + 使用 Definition 的 `MagicCircleToSpawn` 创建实例；
-+ 调用 `InitializeFromDefinition(Definition, Instigator, ActualBuildingTime)`；
++ 调用MagicCircleInstance的 `InitializeFromDefinition(Definition, Instigator, ActualBuildingTime)`；
 + 完成实例生成后由实例自身进入 `Building`，部署 GA 不直接激活实例魔法能力。
 
-问题：
+`OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag)`
++ 参考ULyraGameplayAbility_RangedWeapon::OnTargetDataReadyCallback
++ 回调在本地客户端和服务器都会执行：客户端重新打开预测窗口并通过 `CallServerSetReplicatedTargetData` 发送 TargetData；服务器此前已在 `ActivateAbility` 中以 `(CurrentSpecHandle, ActivationPredictionKey)` 绑定同一回调。
++ 回调中先取得 `LocalTargetDataHandle` 的所有权。服务器验证 TargetData 后，仅在验证通过且 `CommitAbility` 成功时计算权威 `ActualBuildingTime` 并调用 `SpawnMagicCircleInstance`。
++ 服务器无论接受、拒绝或 Commit 失败，均调用 `MagicWeaponStateComp->ClientConfirmTargetData(LocalTargetDataHandle.UniqueId, bIsTargetDataValid)`，使客户端清理预测 ViewActor；`bIsTargetDataValid` 在 Commit 失败时也必须为 false。
++ #if WITH_SERVER_CODE
+	if (AController* Controller = GetControllerFromActorInfo())
+	{
+		if (Controller->GetLocalRole() == ROLE_Authority)
+		{
+			//轻量验证 TargetData 结构和终点 Transform；不在服务器重新计算部署位置。
+			//尝试生成权威实例：实例自身的碰撞组件通过 DontSpawnIfColliding 拒绝被阻挡的位置。
+			//生成成功后 CommitAbility 统一检查资源和其它 GAS 条件，随后计算权威构建时间并完成部署。
 
-对于不同的魔法，存在不同的部署方式，如有的魔法需要发出射线检测获取命中点。部署 GA 可以通过部署策略或子类复用，魔法阵实例类型和构建时间均从 Definition 和运行时参数获取，不能硬编码在 GA 中。
+			//通知MagicWeaponStateComponent服务器已生成魔法阵实例
+			if (UMagicWeaponStateComponent* MagicWeaponStateComp = Controller->FindComponentByClass<UMagicWeaponStateComponent>())
+			{
+				//这是一个可靠的Client RPC
+				MagicWeaponStateComp->ClientConfirmTargetData(LocalTargetDataHandle.UniqueId, bIsTargetDataValid);
+			}
+		}
+	}
+  #endif //WITH_SERVER_CODE
+
+## 其它添加
+在 `MalogicGameplayTags.h/.cpp` 中声明并定义原生标签 `Ability_MagicWeapon_NoFiring`，标签名为 `Ability.MagicWeapon.NoFiring`；部署 GA 将其加入 `ActivationBlockedTags`。
+
+
+
+# MalogicGA_Raycast
+
+
 
 # MalogicGA_(MagicName)
 ## 概述

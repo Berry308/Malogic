@@ -18,6 +18,7 @@ namespace MalogicGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_ActivateFail_ActivationGroup);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Behavior_SurvivesDeath);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_MagicWeapon_NoFiring);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Move);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Look_Mouse);
