@@ -40,6 +40,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	//服务器经过TargetData验证和生成MagicCircleInstance后，调用Client RPC通知客户端，销毁预测的MagicCircleViewActor
 	UFUNCTION(Client, Reliable)
 	void ClientConfirmTargetData(uint16 UniqueId, bool bIsTargetDataValid);
 

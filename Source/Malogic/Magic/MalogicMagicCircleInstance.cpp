@@ -36,7 +36,7 @@ void AMalogicMagicCircleInstance::GetLifetimeReplicatedProps(TArray<FLifetimePro
 	DOREPLIFETIME(ThisClass, DeploymentInstigator);
 }
 
-
+//通常在部署创建实例时，由部署者调用，传入魔法阵定义和部署者信息
 void AMalogicMagicCircleInstance::InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime)
 {
 	if (!HasAuthority())
@@ -87,6 +87,7 @@ void AMalogicMagicCircleInstance::BeginPlay()
 			UE_LOG(LogMalogic, Error, TEXT("Magic circle definition [%s] has no AbilitySetForMagicCircle."), *GetNameSafe(Definition));
 		}
 
+		//为什么不默认创建HealthSet和CombatSet？因为有些魔法阵可能不需要生命值和战斗属性，所以这些属性是可选的。
 		HealthSet = AbilitySystemComponent->GetSet<UMalogicHealthSet>();
 		CombatSet = AbilitySystemComponent->GetSet<UMalogicCombatSet>();
 		if (HealthSet)
@@ -116,6 +117,7 @@ void AMalogicMagicCircleInstance::BeginPlay()
 	}
 }
 
+//根据生命周期策略，初始化魔法阵的生命周期管理
 void AMalogicMagicCircleInstance::InitializeLifetime()
 {
 	if (!HasAuthority())
@@ -146,9 +148,7 @@ void AMalogicMagicCircleInstance::StartBuilding()
 		return;
 	}
 
-	const EMagicCircleState OldState = MagicCircleState;
-	MagicCircleState = EMagicCircleState::Building;
-	OnMagicCircleStateChanged(OldState, MagicCircleState);
+	SetMagicCircleState(EMagicCircleState::Building);
 }
 
 void AMalogicMagicCircleInstance::HandleBuildingFinished()
@@ -162,9 +162,7 @@ void AMalogicMagicCircleInstance::HandleBuildingFinished()
 
 	GetWorldTimerManager().ClearTimer(BuildingTimerHandle);
 
-	const EMagicCircleState OldState = MagicCircleState;
-	MagicCircleState = EMagicCircleState::Ready;
-	OnMagicCircleStateChanged(OldState, MagicCircleState);
+	SetMagicCircleState(EMagicCircleState::Ready);
 }
 
 void AMalogicMagicCircleInstance::HandleMagicCircleReady()
@@ -197,9 +195,7 @@ void AMalogicMagicCircleInstance::HandleMagicCircleFinished()
 	{
 		if (LifetimeStrategy == EMagicCircleLifetimeStrategy::OnceAfterSomeGA)
 		{
-			const EMagicCircleState PreviousState = MagicCircleState;
-			MagicCircleState = EMagicCircleState::Destroyed;
-			OnMagicCircleStateChanged(PreviousState, MagicCircleState);
+			SetMagicCircleState(EMagicCircleState::Destroyed);
 		}
 	}
 }
@@ -220,6 +216,7 @@ void AMalogicMagicCircleInstance::HandleMagicCircleDestroyed()
 			GrantedHandles.TakeFromAbilitySystem(AbilitySystemComponent);
 			bAbilitySetGranted = false;
 		}
+		//在此处延迟销毁魔法阵实例，以确保客户端有足够的时间接收状态更新（主要是MagicCircleState）和播放相关的特效或动画
 		SetLifeSpan(0.5f);
 	}
 }
@@ -227,6 +224,19 @@ void AMalogicMagicCircleInstance::HandleMagicCircleDestroyed()
 void AMalogicMagicCircleInstance::OnRep_MagicCircleState(EMagicCircleState OldState)
 {
 	OnMagicCircleStateChanged(OldState, MagicCircleState);
+}
+
+void AMalogicMagicCircleInstance::SetMagicCircleState(EMagicCircleState NewState)
+{
+	if (!HasAuthority() || MagicCircleState == NewState)
+	{
+		return;
+	}
+
+	const EMagicCircleState OldState = MagicCircleState;
+	MagicCircleState = NewState;
+	ForceNetUpdate();
+	OnMagicCircleStateChanged(OldState, NewState);
 }
 
 //此函数后续可能需要修改，针对不同的OldState到NewState组合做不同的处理
@@ -305,15 +315,20 @@ void AMalogicMagicCircleInstance::ActivateMagic(const FGameplayTag& ActivationTa
 		return;
 	}
 
+	SetMagicCircleState(EMagicCircleState::Active);
+
 	if (!ActivateAbilitiesByTag(ActivationTag))
 	{
 		UE_LOG(LogMalogic, Warning, TEXT("Magic circle [%s] could not activate any ability for tag [%s]."), *GetNameSafe(this), *ActivationTag.ToString());
-		return;
+		HandleActivateMagicFail(ActivationTag);
 	}
+}
 
-	const EMagicCircleState OldState = MagicCircleState;
-	MagicCircleState = EMagicCircleState::Active;
-	OnMagicCircleStateChanged(OldState, MagicCircleState);
+void AMalogicMagicCircleInstance::HandleActivateMagicFail(const FGameplayTag& ActivationTag)
+{
+	// The base behavior treats an activation failure as a completed, one-shot magic circle.
+	(void)ActivationTag;
+	FinishMagicCircle();
 }
 
 void AMalogicMagicCircleInstance::StartLifeTimeTimer()
@@ -375,9 +390,7 @@ void AMalogicMagicCircleInstance::FinishMagicCircle()
 
 	GetWorldTimerManager().ClearTimer(LifeTimeTimerHandle);
 
-	const EMagicCircleState OldState = MagicCircleState;
-	MagicCircleState = EMagicCircleState::Finished;
-	OnMagicCircleStateChanged(OldState, MagicCircleState);
+	SetMagicCircleState(EMagicCircleState::Finished);
 }
 
 void AMalogicMagicCircleInstance::HandleOutOfHealth()
@@ -390,9 +403,7 @@ void AMalogicMagicCircleInstance::HandleOutOfHealth()
 	GetWorldTimerManager().ClearTimer(BuildingTimerHandle);
 	GetWorldTimerManager().ClearTimer(LifeTimeTimerHandle);
 
-	const EMagicCircleState OldState = MagicCircleState;
-	MagicCircleState = EMagicCircleState::Destroyed;
-	OnMagicCircleStateChanged(OldState, MagicCircleState);
+	SetMagicCircleState(EMagicCircleState::Destroyed);
 }
 
 void AMalogicMagicCircleInstance::HandleOutOfHealthEvent(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec, float DamageMagnitude, float OldValue, float NewValue)
@@ -430,4 +441,3 @@ void AMalogicMagicCircleInstance::EndPlay(const EEndPlayReason::Type EndPlayReas
 
 	Super::EndPlay(EndPlayReason);
 }
-

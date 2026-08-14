@@ -42,6 +42,7 @@ public:
 	FGameplayTag InputTag;
 
 	// Tags used by systems other than player input to activate the ability.
+	// 在赋予魔法阵的能力集中，魔法阵可能具有多个能力，需要根据具体的标签在不同时机激活。
 	UPROPERTY(EditDefaultsOnly, Meta = (Categories = "GameplayTag"))
 	TArray<FGameplayTag> ActivationTags;
 };

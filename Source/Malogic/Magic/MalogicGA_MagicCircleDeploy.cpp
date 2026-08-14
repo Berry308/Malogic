@@ -11,17 +11,18 @@
 #include "Magic/MagicCircleViewActor.h"
 #include "Magic/MalogicMagicCircleDefinition.h"
 #include "Magic/MalogicMagicCircleInstance.h"
-#include "MalogicGameplayTags.h"
 #include "MalogicLogChannels.h"
 #include "Weapon/MagicWeaponStateComponent.h"
 #include "Weapon/MalogicMagicWeaponInstance.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(MalogicGA_MagicCircleDeploy)
 
+UE_DEFINE_GAMEPLAY_TAG_STATIC(Ability_MagicWeapon_NoFiring, "Ability.MagicWeapon.NoFiring");
+
 UMalogicGA_MagicCircleDeploy::UMalogicGA_MagicCircleDeploy(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
-	ActivationBlockedTags.AddTag(MalogicGameplayTags::Ability_MagicWeapon_NoFiring);
+	ActivationBlockedTags.AddTag(Ability_MagicWeapon_NoFiring);
 }
 
 bool UMalogicGA_MagicCircleDeploy::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
@@ -151,7 +152,32 @@ bool UMalogicGA_MagicCircleDeploy::ValidateDeploymentTargetData(const FGameplayA
 		return false;
 	}
 
-	//以后还需要添加更多的验证逻辑，比如检查部署位置与玩家的距离是否在允许的范围内，是否与其他对象发生碰撞等。
+	// The source transform is client-provided target data and must not be used for
+	// authorization. Validate the submitted endpoint against the server pawn.
+	const APawn* AvatarPawn = CurrentActorInfo ? Cast<APawn>(CurrentActorInfo->AvatarActor.Get()) : nullptr;
+	const UMalogicMagicCircleDefinition* Definition = GetAssociatedDefinition(CurrentSpecHandle, CurrentActorInfo);
+	if (!AvatarPawn || !Definition || !FMath::IsFinite(Definition->BaseMaxDeployDistance) || Definition->BaseMaxDeployDistance < 0.0f)
+	{
+		return false;
+	}
+
+	const FVector PawnLocation = AvatarPawn->GetActorLocation();
+	const FVector DeployLocation = OutDeployTransform.GetLocation();
+	if (PawnLocation.ContainsNaN() || DeployLocation.ContainsNaN())
+	{
+		return false;
+	}
+
+	//最大部署距离的获取方式在未来可能需要修改，使用一个特定的函数接口以便获取在经过buff或其他因素影响后的最大部署距离。
+	const float MaxDeployDistance = Definition->BaseMaxDeployDistance;
+	const float DistanceSquared = FVector::DistSquared(PawnLocation, DeployLocation);
+	if (DistanceSquared > FMath::Square(MaxDeployDistance))
+	{
+		UE_LOG(LogMalogic, Warning,
+			TEXT("Magic circle deployment rejected for [%s]: endpoint distance [%f] exceeds maximum [%f]."),
+			*GetNameSafe(AvatarPawn), FMath::Sqrt(DistanceSquared), MaxDeployDistance);
+		return false;
+	}
 
 	return true;
 }
@@ -171,11 +197,11 @@ AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInsta
 	}
 
 	AMalogicMagicCircleInstance* MagicCircleInstance = World->SpawnActorDeferred<AMalogicMagicCircleInstance>(
-		Definition->MagicCircleToSpawn,
-		DeployTransform,
-		AvatarPawn,
-		AvatarPawn,
-		ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding);
+		Definition->MagicCircleToSpawn,DeployTransform,
+		AvatarPawn,AvatarPawn,
+		ESpawnActorCollisionHandlingMethod::DontSpawnIfColliding
+	);
+
 	if (!MagicCircleInstance)
 	{
 		UE_LOG(LogMalogic, Error, TEXT("Magic circle deployment failed to spawn instance [%s]."), *GetNameSafe(Definition->MagicCircleToSpawn));
@@ -269,13 +295,15 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 				const UMalogicMagicCircleDefinition* Definition = GetAssociatedDefinition(CurrentSpecHandle, CurrentActorInfo);
 				bIsTargetDataValid = ValidateDeploymentTargetData(LocalTargetDataHandle, DeployTransform);
 
+				//这个地方有股异味，CommitAbility和SpawnMagicCircleInstance的调用顺序可能会影响游戏逻辑，应该仔细考虑是否需要调整。
+				//如果CommitAbility在前面，那么SpawnMagicCircleInstance可能会失败，这就导致了无用的消耗
+				//如果SpawnMagicCircleInstance在前面，那么CommitAbility可能会失败，这就导致了魔法阵被销毁，尽管结果正确，但是可能会有一些不必要的开销（在魔力不够的时候）
 				AMalogicMagicCircleInstance* SpawnedMagicCircle = nullptr;
 				if (bIsTargetDataValid)
 				{
 					SpawnedMagicCircle = SpawnMagicCircleInstance(Definition, CurrentActorInfo, DeployTransform, CalculateActualBuildingTime(Definition, CurrentActorInfo));
 				}
-
-				//这个地方有股异味
+				
 				bDeploymentSucceeded = IsValid(SpawnedMagicCircle)
 					&& CommitAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo);
 				if (!bDeploymentSucceeded && SpawnedMagicCircle)
@@ -285,6 +313,7 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 
 				if (UMagicWeaponStateComponent* WeaponStateComponent = Controller->FindComponentByClass<UMagicWeaponStateComponent>())
 				{
+					//Question：这里能够保证网络同步Actor和RPC同时或同一批次到达吗？
 					WeaponStateComponent->ClientConfirmTargetData(LocalTargetDataHandle.UniqueId, bDeploymentSucceeded);
 				}
 			}

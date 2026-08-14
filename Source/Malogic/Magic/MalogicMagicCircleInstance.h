@@ -29,7 +29,7 @@ enum class EMagicCircleState : uint8
 UENUM(BlueprintType)
 enum class EMagicCircleLifetimeStrategy : uint8
 {
-	OnceAfterSomeGA,
+	OnceAfterSomeGA,//一次性魔法阵，在激活某个GA后，魔法阵就会结束
 	PersistentTilDie
 };
 
@@ -49,7 +49,7 @@ class MALOGIC_API AMalogicMagicCircleInstance : public AActor
 public:
 	AMalogicMagicCircleInstance();
 
-	void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
+	virtual void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Magic Circle")
 	void ActivateMagic(const FGameplayTag& ActivationTag);
@@ -91,7 +91,9 @@ protected:
 	void OnRep_MagicCircleState(EMagicCircleState OldState);
 
 	void OnMagicCircleStateChanged(EMagicCircleState OldState, EMagicCircleState NewState);
+	void SetMagicCircleState(EMagicCircleState NewState);
 	bool ActivateAbilitiesByTag(const FGameplayTag& ActivationTag);
+	virtual void HandleActivateMagicFail(const FGameplayTag& ActivationTag);
 	void StartLifeTimeTimer();
 	void OnMagicCircleLifeTimeEnded();
 	void OnAbilityFinished(const FAbilityEndedData& AbilityEndedData);

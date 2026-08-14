@@ -2,6 +2,7 @@
 
 #include "Abilities/GameplayAbilityTargetTypes.h"
 #include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/Pawn.h"
 #include "Magic/MagicCircleViewActor.h"
@@ -79,12 +80,14 @@ void UMagicWeaponStateComponent::AddUnconfirmedPredictiveViewActor(const FGamepl
 	}
 
 	const uint16 UniqueId = InTargetData.UniqueId;
-	//如果找不到匹配的Id，返回并警告
+	//如果发现数组中已有相同Id，返回并警告
 	if (UnconfirmedPredictiveViewActors.ContainsByPredicate(
 		[UniqueId](const FPredictiveMagicCircleViewActor& Entry)
 		{
 			return Entry.UniqueId == UniqueId;
-		}))
+		}
+		)
+	)
 	{
 		UE_LOG(LogMalogic, Warning, TEXT("MagicWeaponStateComponent [%s] rejected duplicate predictive view ID [%u]."), *GetNameSafe(this), UniqueId);
 		return;
