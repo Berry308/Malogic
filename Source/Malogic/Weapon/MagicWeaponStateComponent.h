@@ -20,6 +20,7 @@ struct FPredictiveMagicCircleViewActor
 
 	TWeakObjectPtr<AMagicCircleViewActor> ViewActor;
 	uint16 UniqueId = 0;
+	float SpawnServerTime = 0.0f; //当ViewActor生成时服务器的时间
 };
 
 /*

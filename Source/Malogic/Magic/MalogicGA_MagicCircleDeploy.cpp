@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "Equipment/MalogicEquipmentManagerComponent.h"
 #include "GameFramework/Controller.h"
+#include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
 #include "Magic/MagicCircleDeployComponent.h"
 #include "Magic/MagicCircleViewActor.h"
@@ -182,7 +183,7 @@ bool UMalogicGA_MagicCircleDeploy::ValidateDeploymentTargetData(const FGameplayA
 	return true;
 }
 
-AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime) const
+AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo) const
 {
 	if (!ActorInfo || !ActorInfo->IsNetAuthority() || !Definition || !Definition->MagicCircleToSpawn)
 	{
@@ -209,6 +210,7 @@ AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInsta
 	}
 
 	MagicCircleInstance->InitializeFromDefinition(Definition, AvatarPawn, ActualBuildingTime);
+	MagicCircleInstance->InitializeFromTargetData(SpawnInfo);
 	MagicCircleInstance->FinishSpawning(DeployTransform);
 	return IsValid(MagicCircleInstance) ? MagicCircleInstance : nullptr;
 }
@@ -251,6 +253,13 @@ void UMalogicGA_MagicCircleDeploy::StartDeploymentTargeting()
 	TargetData.UniqueId = WeaponStateComponent->AllocatePredictiveViewId();
 
 	FMalogicGATargetData_MagicCircleSpawnInfo* SpawnInfo = new FMalogicGATargetData_MagicCircleSpawnInfo();
+	if (const UWorld* World = GetWorld())
+	{
+		if (const AGameStateBase* GameState = World->GetGameState())
+		{
+			SpawnInfo->ClientSpawnTime = GameState->GetServerWorldTimeSeconds();
+		}
+	}
 	SpawnInfo->SourceLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
 	SpawnInfo->SourceLocation.LiteralTransform = CurrentActorInfo->AvatarActor.IsValid() ? CurrentActorInfo->AvatarActor->GetActorTransform() : FTransform::Identity;
 	SpawnInfo->TargetLocation.LocationType = EGameplayAbilityTargetingLocationType::LiteralTransform;
@@ -294,14 +303,18 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 				FTransform DeployTransform;
 				const UMalogicMagicCircleDefinition* Definition = GetAssociatedDefinition(CurrentSpecHandle, CurrentActorInfo);
 				bIsTargetDataValid = ValidateDeploymentTargetData(LocalTargetDataHandle, DeployTransform);
+				FMalogicGATargetData_MagicCircleSpawnInfo* SpawnInfo = bIsTargetDataValid
+					? static_cast<FMalogicGATargetData_MagicCircleSpawnInfo*>(LocalTargetDataHandle.Get(0))
+					: nullptr;
+				bIsTargetDataValid = bIsTargetDataValid && SpawnInfo != nullptr;
 
 				//这个地方有股异味，CommitAbility和SpawnMagicCircleInstance的调用顺序可能会影响游戏逻辑，应该仔细考虑是否需要调整。
 				//如果CommitAbility在前面，那么SpawnMagicCircleInstance可能会失败，这就导致了无用的消耗
 				//如果SpawnMagicCircleInstance在前面，那么CommitAbility可能会失败，这就导致了魔法阵被销毁，尽管结果正确，但是可能会有一些不必要的开销（在魔力不够的时候）
 				AMalogicMagicCircleInstance* SpawnedMagicCircle = nullptr;
-				if (bIsTargetDataValid)
+				if (bIsTargetDataValid && SpawnInfo)
 				{
-					SpawnedMagicCircle = SpawnMagicCircleInstance(Definition, CurrentActorInfo, DeployTransform, CalculateActualBuildingTime(Definition, CurrentActorInfo));
+					SpawnedMagicCircle = SpawnMagicCircleInstance(Definition, CurrentActorInfo, DeployTransform, CalculateActualBuildingTime(Definition, CurrentActorInfo), *SpawnInfo);
 				}
 				
 				bDeploymentSucceeded = IsValid(SpawnedMagicCircle)
@@ -320,9 +333,7 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 		}
 #endif
 
-
 		EndAbility(CurrentSpecHandle, CurrentActorInfo, CurrentActivationInfo, true, !bDeploymentSucceeded);
-
 	}
 }
 

@@ -10,6 +10,7 @@ class UMalogicMagicCircleDefinition;
 class UMalogicMagicWeaponInstance;
 class AMalogicMagicCircleInstance;
 struct FGameplayAbilityTargetDataHandle;
+struct FMalogicGATargetData_MagicCircleSpawnInfo;
 
 UCLASS()
 class MALOGIC_API UMalogicGA_MagicCircleDeploy : public UMalogicGameplayAbility
@@ -31,7 +32,7 @@ private:
 	const UMalogicMagicCircleDefinition* GetAssociatedDefinition(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo) const;
 	UMalogicMagicWeaponInstance* GetMagicWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo) const;
 	bool ValidateDeploymentTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FTransform& OutDeployTransform) const;
-	AMalogicMagicCircleInstance* SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime) const;
+	AMalogicMagicCircleInstance* SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo) const;
 
 	void StartDeploymentTargeting();
 	void OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag);

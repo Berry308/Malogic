@@ -179,7 +179,7 @@ TArray<FGameplayTag> ActivationTags // 目前用于内部按标签查找和激�
 + `bReplicates = true`。魔法阵通常是固定位置 Actor，不需要复制移动，除非某种魔法明确要求移动；
 + ASC 的 `OwnerActor` 、`Instigator`和 `AvatarActor` 都指向该魔法阵实例。用于EffectContext、伤害归属计算BaseDamage用魔法阵实例；
 + `MalogicGA_(MagicName)Deploy` 仅在服务器上执行计算和生成，在生成实例前根据 MagicWeapon 的属性、Definition 的 `BaseBuildingTime` 和其它状态计算 `ActualBuildingTime`；
-+ 服务器在生成实例时将 Definition、部署者、部署变换和 `ActualBuildingTime` 一并传入实例，并初始化 ASC、授予 AbilitySet；
++ 服务器在生成实例时将 Definition、部署者、部署变换、`ActualBuildingTime` 和 TargetData 一并传入实例，并初始化 ASC、授予 AbilitySet；
 + 目标位置、朝向、部署者和 Definition 在生成时确定并保存，不能从玩家当前装备项重新读取；
 + 服务器销毁实例前取消其仍在运行的能力并回收 AbilitySet 的 GrantedHandles。
 
@@ -349,6 +349,11 @@ void InitializeFromDefinition(const UMagicCircleDefinition* Definition, AActor* 
 + 接收并保存由 `MalogicGA_(MagicName)Deploy` 计算出的 `ActualBuildingTime`；
 + 由服务器调用，不能在此处直接激活魔法。
 
+void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)
++ 仅服务器调用；
++ 使用 `GetWorld()->GetGameState()->GetServerWorldTimeSeconds()` 减去 `SpawnInfo.ClientSpawnTime` 得到 `ElapsedTime`；
++ 对异常或超出范围的时间戳进行保护，构建计时使用 `max(ActualBuildingTime - ElapsedTime, 0)`。
+
 void InitializeLifetime()
 + 仅服务器执行生命周期初始化和委托绑定；
 + 如果 `LifetimeStrategy == OnceAfterSomeGA`，`FinishAbilityClass` 不能为空，否则报告配置错误；配置有效时绑定 `OnAbilityFinished` 到 `ASC->OnAbilityEnded`；
@@ -365,7 +370,7 @@ void BeginPlay()
 void StartBuilding()
 + 仅服务器调用，并校验当前状态为 `Spawned`；
 + 将状态切换为 `Building`，调用 `OnMagicCircleStateChanged`；
-+ 构建计时器由 `OnMagicCircleStateChanged` 在服务器分支中启动，计时长度为 `ActualBuildingTime`，计时结束后调用 `HandleBuildingFinished`。
++ 构建计时器由 `OnMagicCircleStateChanged` 在服务器分支中启动，计时长度为 `max(ActualBuildingTime - ElapsedTime, 0)`，计时结束后调用 `HandleBuildingFinished`。
 
 void HandleBuildingFinished()
 + 仅服务器调用，并校验当前状态为 `Building`；
@@ -379,7 +384,7 @@ void OnRep_MagicCircleState(EMagicCircleState OldState)
 
 void OnMagicCircleStateChanged(EMagicCircleState OldState,EMagicCircleState NewState)
 + 根据 `NewState` 分发状态处理逻辑；该函数可以在服务器状态切换后调用，也可以由客户端的 `OnRep_MagicCircleState` 调用；
-+ `Building`：服务器启动构建计时器，客户端根据 `ActualBuildingTime` 播放构建动画；
++ `Building`：服务器启动剩余构建计时器，客户端根据复制状态和 `ActualBuildingTime` 播放构建动画；
 + `Ready`：客户端结束构建动画；服务器启动 `LifeTime` 计时器，先按需调用 `ActivateAbilitiesByTag(MagicCircle.Ability.BuildFinished)`，再根据 `ActivateStrategy` 决定是否调用 `ActivateMagic(MagicCircle.Ability.Activate)`；
 + `Active`：客户端播放魔法释放表现；
 + `Finished`：停止生命周期计时器，根据生命周期策略播放结束表现或等待销毁；
@@ -848,14 +853,14 @@ int32 GetUnconfirmedPredictiveViewActorCount() const
 # MalogicGATargetData_MagicCircleSpawnInfo
 基类：FGameplayAbilityTargetData_LocationInfo
 参考：FMRGameplayAbilityTargetData_SingleTargetHit  路径：E:\Unreal Projects\MazeRunner\Source\MazeRunner\AbilitySystem
-定义在MalogicGA_MagicCircleDeploy.h中。
+定义在 `AbilitySystem/TargetData/MalogicGATargetData_MagicCircleSpawnInfo.h` 中。
 
 成员：
-//float MagicCircleBuildingTime //此项已经被注释，服务器会主动再计算一次BuildingTime以保证逻辑正确。不需要客户端计算该参数并且传递。
+float ClientSpawnTime //客户端创建部署请求时记录的同步服务器时间，用于服务器扣除TargetData传输耗时。
 
-`FGameplayAbilityTargetData_LocationInfo` 的 `SourceLocation` 和 `TargetLocation` 均可使用 `LiteralTransform`；部署请求将部署源变换写入 `SourceLocation`，将客户端计算出的完整部署变换写入 `TargetLocation`。服务器从 `GetOrigin()` 和 `GetEndPointTransform()` 读取，不接受任何客户端构建时间作为权威值。
+`FGameplayAbilityTargetData_LocationInfo` 的 `SourceLocation` 和 `TargetLocation` 均可使用 `LiteralTransform`；部署请求将部署源变换写入 `SourceLocation`，将客户端计算出的完整部署变换写入 `TargetLocation`。服务器从 `GetOrigin()` 和 `GetEndPointTransform()` 读取，不接受任何客户端构建时间作为权威值。`ClientSpawnTime` 只用于计算网络传输期间已经经过的时间。
 
-即使当前没有额外字段，派生 TargetData 仍需重写 `GetScriptStruct()` 返回 `FMalogicGATargetData_MagicCircleSpawnInfo::StaticStruct()`，并实现 `NetSerialize()`（先调用父类序列化）及 `TStructOpsTypeTraits` 的 `WithNetSerializer = true`。否则 GAS 网络传输后只会还原为基类，服务器无法可靠识别此部署 TargetData 类型。
+派生 TargetData 必须重写 `GetScriptStruct()` 返回 `FMalogicGATargetData_MagicCircleSpawnInfo::StaticStruct()`，并实现 `NetSerialize()`：先调用父类序列化，再序列化 `ClientSpawnTime`，同时设置 `TStructOpsTypeTraits` 的 `WithNetSerializer = true`。
 
 
 # MalogicGA_MagicCircleDeploy
@@ -870,10 +875,9 @@ int32 GetUnconfirmedPredictiveViewActorCount() const
 进行射线检测、目标过滤、位置约束和朝向计算；
 + ActualBuildingTime计算。
 读取 Definition 的 `BaseBuildingTime`，结合 MagicWeapon 属性、GameplayEffect、GameplayTag 和其它状态计算 `ActualBuildingTime`；对 `ActualBuildingTime` 进行最小值和最大值限制，不能通过非法值绕过 `Building` 阶段；
-+ 构建TargetData，通知WeaponStateComponent本地生成ViewActor进行预测
-构建FMalogicGATargetData_MagicCircleSpawnInfo结构体，作为魔法阵实例所需的生成初始数据。
+构建FMalogicGATargetData_MagicCircleSpawnInfo结构体，作为魔法阵实例所需的生成初始数据；在客户端创建TargetData时写入`ClientSpawnTime`，并通知WeaponStateComponent本地生成ViewActor进行预测。
 + 创建生成魔法阵实例与初始化。
-在服务器上使用 Deferred Spawn 创建 `AMalogicMagicCircleInstance`，并在 `FinishSpawning` 前传入 Definition、部署者、部署变换和 `ActualBuildingTime`；以 `DontSpawnIfColliding` 让真实魔法阵 Actor 的碰撞组件在生成时拒绝被阻挡的位置。
+在服务器上使用 Deferred Spawn 创建 `AMalogicMagicCircleInstance`，并在 `FinishSpawning` 前传入 Definition、部署者、部署变换、`ActualBuildingTime` 和 TargetData；调用 `InitializeFromDefinition` 后调用 `InitializeFromTargetData`，以 `DontSpawnIfColliding` 让真实魔法阵 Actor 的碰撞组件在生成时拒绝被阻挡的位置。
 + 验证部署请求的权限、资源。
 服务器不重新计算部署位置，只使用客户端提交的部署变换，对其部署位置进行验证（是否在最大部署距离内）。
 
@@ -953,20 +957,20 @@ ActivationBlockedTags.AddTag(TAG_MagicWeaponFireBlocked);
 + 调用CalculateDeployTransform
 + 调用CalculateActualBuildingTime（本地也需要调用计算，进行客户端魔法阵构建动画表现的预测）
 + 构建MalogicGATargetData_MagicCircleSpawnInfo
-+ 将部署源和完整部署变换分别写入 `SourceLocation.LiteralTransform` 与 `TargetLocation.LiteralTransform`，并将 `TargetData.UniqueId` 设为 `MagicWeaponStateComponent->AllocatePredictiveViewId()` 的结果。
++ 将部署源和完整部署变换分别写入 `SourceLocation.LiteralTransform` 与 `TargetLocation.LiteralTransform`，写入客户端同步服务器时间 `ClientSpawnTime`，并将 `TargetData.UniqueId` 设为 `MagicWeaponStateComponent->AllocatePredictiveViewId()` 的结果。
 + 调用MagicWeaponStateComponent->AddUnconfirmedPredictiveViewActor
 + 调用OnTargetDataReadyCallback
 
-`SpawnMagicCircleInstance(const UMagicCircleDefinition* Definition, const FTransform& DeployTransform, float ActualBuildingTime)`
+`SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)`
 + 仅服务器调用；
 + 使用 Definition 的 `MagicCircleToSpawn` 创建实例；
-+ 调用MagicCircleInstance的 `InitializeFromDefinition(Definition, Instigator, ActualBuildingTime)`；
++ 调用 MagicCircleInstance 的 `InitializeFromDefinition(Definition, Instigator, ActualBuildingTime)` 和 `InitializeFromTargetData(SpawnInfo)`；
 + 完成实例生成后由实例自身进入 `Building`，部署 GA 不直接激活实例魔法能力。
 
 `OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag)`
 + 参考ULyraGameplayAbility_RangedWeapon::OnTargetDataReadyCallback
 + 回调在本地客户端和服务器都会执行：客户端重新打开预测窗口并通过 `CallServerSetReplicatedTargetData` 发送 TargetData；服务器此前已在 `ActivateAbility` 中以 `(CurrentSpecHandle, ActivationPredictionKey)` 绑定同一回调。
-+ 回调中先取得 `LocalTargetDataHandle` 的所有权。服务器验证 TargetData 后，仅在验证通过且 `CommitAbility` 成功时计算权威 `ActualBuildingTime` 并调用 `SpawnMagicCircleInstance`。
++ 回调中先取得 `LocalTargetDataHandle` 的所有权。服务器验证 TargetData 后，仅在验证通过且 `CommitAbility` 成功时计算权威 `ActualBuildingTime`，提取 `FMalogicGATargetData_MagicCircleSpawnInfo` 并调用 `SpawnMagicCircleInstance`。
 + 服务器无论接受、拒绝或 Commit 失败，均调用 `MagicWeaponStateComp->ClientConfirmTargetData(LocalTargetDataHandle.UniqueId, bIsTargetDataValid)`，使客户端清理预测 ViewActor；`bIsTargetDataValid` 在 Commit 失败时也必须为 false。
 + #if WITH_SERVER_CODE
 	if (AController* Controller = GetControllerFromActorInfo())
@@ -1086,4 +1090,4 @@ float BeamRadius
 
 ## 问题
 + 不同魔法阵实例需要的初始化数据不一，应该怎么做？
-前面定义了MalogicGATargetData_MagicCircleSpawnInfo，我可以在MalogicGA_MagicDeploy::SpawnMagicCircleInstance函数中新增一个参数FGameplayAbilityTargetDataHandle。然后在MagicCircleInstance中新增一个函数virtual void InitializeFromSpawnInfoTargetData(MalogicGATargetData_MagicCircleSpawnInfo)。在MagicCircleInstance的子类中，自定义初始化逻辑。
+前面定义了MalogicGATargetData_MagicCircleSpawnInfo，在 `SpawnMagicCircleInstance` 中传入该结构体，并在 `MagicCircleInstance` 中提供 `virtual void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)`。子类可在此函数中添加自定义初始化逻辑。

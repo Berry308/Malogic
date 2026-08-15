@@ -32,6 +32,8 @@ void UMagicWeaponStateComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 void UMagicWeaponStateComponent::ClientConfirmTargetData_Implementation(uint16 UniqueId, bool bIsTargetDataValid)
 {
 	(void)bIsTargetDataValid;
+	//获取当前服务器的时间，计算RTT并尝试修改代理Actor的动画播放进度。
+
 	DestroyUnconfirmedPredictiveViewActor(UniqueId);
 }
 
@@ -113,6 +115,7 @@ void UMagicWeaponStateComponent::AddUnconfirmedPredictiveViewActor(const FGamepl
 
 	FPredictiveMagicCircleViewActor& NewEntry = UnconfirmedPredictiveViewActors.Emplace_GetRef(UniqueId);
 	NewEntry.ViewActor = NewViewActor;
+	NewEntry.SpawnServerTime = World->GetGameState()->GetServerWorldTimeSeconds();
 }
 
 void UMagicWeaponStateComponent::DestroyUnconfirmedPredictiveViewActor(uint16 UniqueId)

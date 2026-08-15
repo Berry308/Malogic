@@ -12,6 +12,7 @@ class UMalogicGameplayAbility;
 class UMalogicHealthComponent;
 class UMalogicHealthSet;
 class UMalogicMagicCircleDefinition;
+struct FMalogicGATargetData_MagicCircleSpawnInfo;
 struct FGameplayTag;
 struct FGameplayEffectSpec;
 
@@ -50,6 +51,7 @@ public:
 	AMalogicMagicCircleInstance();
 
 	virtual void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
+	virtual void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Magic Circle")
 	void ActivateMagic(const FGameplayTag& ActivationTag);
@@ -91,6 +93,7 @@ protected:
 	void OnRep_MagicCircleState(EMagicCircleState OldState);
 
 	void OnMagicCircleStateChanged(EMagicCircleState OldState, EMagicCircleState NewState);
+
 	void SetMagicCircleState(EMagicCircleState NewState);
 	bool ActivateAbilitiesByTag(const FGameplayTag& ActivationTag);
 	virtual void HandleActivateMagicFail(const FGameplayTag& ActivationTag);
@@ -101,6 +104,7 @@ protected:
 	void HandleOutOfHealth();
 	void HandleOutOfHealthEvent(AActor* DamageInstigator, AActor* DamageCauser, const FGameplayEffectSpec* DamageEffectSpec, float DamageMagnitude, float OldValue, float NewValue);
 
+protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
 	EMagicCircleLifetimeStrategy LifetimeStrategy = EMagicCircleLifetimeStrategy::OnceAfterSomeGA;
 
@@ -109,6 +113,10 @@ protected:
 
 	UPROPERTY(Replicated)
 	float ActualBuildingTime = 0.0f;
+
+	//提供给魔法阵进行动画播放速度计算。
+	UPROPERTY(BlueprintReadOnly)
+	float BaseBuildingTime = 0.0f;
 
 	//如果OnRep函数中声明了一个与同步属性类型相同的参数，引擎会自动将同步发生前的本地值（Old Value）作为参数传入。
 	UPROPERTY(ReplicatedUsing = OnRep_MagicCircleState)
@@ -144,6 +152,7 @@ private:
 
 	FTimerHandle BuildingTimerHandle;
 	FTimerHandle LifeTimeTimerHandle;
+	float ElapsedTime = 0.0f;
 	bool bLifeTimeExpired = false;
 	bool bAbilitySetGranted = false;
 };

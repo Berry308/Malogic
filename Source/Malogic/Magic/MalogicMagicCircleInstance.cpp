@@ -5,6 +5,9 @@
 #include "AbilitySystem/Attributes/MalogicCombatSet.h"
 #include "AbilitySystem/Attributes/MalogicHealthSet.h"
 #include "Character/MalogicHealthComponent.h"
+#include "AbilitySystem/TargetData/MalogicGATargetData_MagicCircleSpawnInfo.h"
+#include "Engine/World.h"
+#include "GameFramework/GameStateBase.h"
 #include "Magic/MalogicMagicCircleDefinition.h"
 #include "MalogicGameplayTags.h"
 #include "MalogicLogChannels.h"
@@ -54,7 +57,33 @@ void AMalogicMagicCircleInstance::InitializeFromDefinition(const UMalogicMagicCi
 	MagicCircleDefinitionClass = Definition->GetClass();
 	DeploymentInstigator = InInstigator;
 	ActualBuildingTime = FMath::Max(0.0f, InActualBuildingTime);
+	BaseBuildingTime = Definition->BaseBuildingTime;
 	MagicCircleState = EMagicCircleState::Spawned;
+}
+
+void AMalogicMagicCircleInstance::InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)
+{
+	if (!HasAuthority())
+	{
+		UE_LOG(LogMalogic, Warning, TEXT("InitializeFromTargetData called on a non-authority magic circle [%s]."), *GetNameSafe(this));
+		return;
+	}
+
+	ElapsedTime = 0.0f;
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GameState = World ? World->GetGameState() : nullptr;
+	if (!GameState || !FMath::IsFinite(SpawnInfo.ClientSpawnTime))
+	{
+		return;
+	}
+
+	const float ServerWorldTime = GameState->GetServerWorldTimeSeconds();
+	if (!FMath::IsFinite(ServerWorldTime))
+	{
+		return;
+	}
+	//在此处计算从客户端发送到服务端的时间差，限制最大值为100ms
+	ElapsedTime = FMath::Clamp(ServerWorldTime - SpawnInfo.ClientSpawnTime, 0.0f, 0.1f);
 }
 
 void AMalogicMagicCircleInstance::BeginPlay()
@@ -248,14 +277,15 @@ void AMalogicMagicCircleInstance::OnMagicCircleStateChanged(EMagicCircleState Ol
 		if (HasAuthority())
 		{
 			GetWorldTimerManager().ClearTimer(BuildingTimerHandle);
-			if (ActualBuildingTime <= 0.0f)
+			const float RemainingBuildingTime = FMath::Max(0.0f, ActualBuildingTime - ElapsedTime);
+			if (RemainingBuildingTime <= 0.0f)
 			{
 				GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::HandleBuildingFinished);
-				UE_LOG(LogMalogic, Warning, TEXT("Magic circle [%s] has a non-positive ActualBuildingTime [%f]. Finishing building immediately."), *GetNameSafe(this), ActualBuildingTime);
+				UE_LOG(LogMalogic, Warning, TEXT("Magic circle [%s] has no remaining building time. ActualBuildingTime [%f], ElapsedTime [%f]."), *GetNameSafe(this), ActualBuildingTime, ElapsedTime);
 			}
 			else
 			{
-				GetWorldTimerManager().SetTimer(BuildingTimerHandle, this, &ThisClass::HandleBuildingFinished, ActualBuildingTime, false);
+				GetWorldTimerManager().SetTimer(BuildingTimerHandle, this, &ThisClass::HandleBuildingFinished, RemainingBuildingTime, false);
 			}
 		}
 		break;

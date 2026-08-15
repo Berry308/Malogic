@@ -10,6 +10,10 @@ struct MALOGIC_API FMalogicGATargetData_MagicCircleSpawnInfo : public FGameplayA
 {
 	GENERATED_BODY()
 
+	/** Server-synchronized timestamp captured when the client created this deployment request. */
+	UPROPERTY()
+	float ClientSpawnTime = 0.0f;
+
 	virtual UScriptStruct* GetScriptStruct() const override
 	{
 		return FMalogicGATargetData_MagicCircleSpawnInfo::StaticStruct();
@@ -17,7 +21,10 @@ struct MALOGIC_API FMalogicGATargetData_MagicCircleSpawnInfo : public FGameplayA
 
 	bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 	{
-		return FGameplayAbilityTargetData_LocationInfo::NetSerialize(Ar, Map, bOutSuccess);
+		const bool bParentSuccess = FGameplayAbilityTargetData_LocationInfo::NetSerialize(Ar, Map, bOutSuccess);
+		Ar << ClientSpawnTime;
+		bOutSuccess &= bParentSuccess;
+		return bParentSuccess;
 	}
 };
 
