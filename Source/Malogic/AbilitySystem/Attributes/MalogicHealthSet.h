@@ -76,6 +76,7 @@ private:
 
 	// The current health attribute.  The health will be capped by the max health attribute.  Health is hidden from modifiers so only executions can modify it.
 	// HideFromModifiers隐藏该属性在编辑器（GameplayEffect 编辑器里的 Modifier 下拉列表）中的显示。 只有GameplayEffectExecutionCalculation可以修改该属性
+	// 怎么初始化血量呢？
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_Health, Category = "MazeRunner|Health", Meta = (HideFromModifiers, AllowPrivateAccess = true))
 	FGameplayAttributeData Health;
 

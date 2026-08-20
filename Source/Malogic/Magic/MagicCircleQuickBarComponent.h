@@ -69,6 +69,10 @@ private:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (ClampMin = "1"))
 	int32 NumSlots = 3;
 
+	/** Magic circle definitions assigned to the quick bar when the component starts. */
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
+	TArray<TSubclassOf<UMalogicMagicCircleDefinition>> DefaultSlots;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Slots)
 	TArray<TSubclassOf<UMalogicMagicCircleDefinition>> Slots;
 

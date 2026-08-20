@@ -27,17 +27,20 @@ struct FGameplayEffectSpec;
 struct FGameplayEventData;
 
 /**
- * EMRAbilityActivationPolicy
+ * EMalogicAbilityActivationPolicy
  *
  *	Defines how an ability is meant to activate.
  */
 UENUM(BlueprintType)
-enum class EMRAbilityActivationPolicy : uint8
+enum class EMalogicAbilityActivationPolicy : uint8
 {
+	//ASC::ProcessAbilityInput
 	// Try to activate the ability when the input is triggered.
+	// 当按键已经按下时，只会触发通知事件，而不会重复添加待激活能力句柄
 	OnInputTriggered,
 
 	// Continually try to activate the ability while the input is active.
+	// 只要按键激活，就会持续尝试激活能力，直到按键释放
 	WhileInputActive,
 
 	// Try to activate the ability when an avatar is assigned.
@@ -96,7 +99,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Lyra|Ability")
 	UMalogicHeroComponent* GetHeroComponentFromActorInfo() const;
 
-	EMRAbilityActivationPolicy GetActivationPolicy() const { return ActivationPolicy; }
+	EMalogicAbilityActivationPolicy GetActivationPolicy() const { return ActivationPolicy; }
 	EMRAbilityActivationGroup GetActivationGroup() const { return ActivationGroup; }
 
 	void TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) const;
@@ -151,7 +154,7 @@ protected:
 
 	// Defines how this ability is meant to activate.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lyra|Ability Activation")
-	EMRAbilityActivationPolicy ActivationPolicy;
+	EMalogicAbilityActivationPolicy ActivationPolicy;
 
 	// Defines the relationship between this ability activating and other abilities activating.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lyra|Ability Activation")

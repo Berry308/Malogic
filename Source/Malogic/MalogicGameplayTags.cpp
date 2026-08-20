@@ -21,6 +21,12 @@ namespace MalogicGameplayTags
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Look_Stick, "InputTag.Look.Stick", "Look (stick) input.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_Crouch, "InputTag.Crouch", "Crouch input.");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_AutoRun, "InputTag.AutoRun", "Auto-run input.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeMagic1, "InputTag.QuickChangeMagic1", "Quickly change to magic circle slot 1.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeMagic2, "InputTag.QuickChangeMagic2", "Quickly change to magic circle slot 2.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeMagic3, "InputTag.QuickChangeMagic3", "Quickly change to magic circle slot 3.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeEquipment1, "InputTag.QuickChangeEquipment1", "Quickly change to equipment quick bar slot 1.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeEquipment2, "InputTag.QuickChangeEquipment2", "Quickly change to equipment quick bar slot 2.");
+	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InputTag_QuickChangeEquipment3, "InputTag.QuickChangeEquipment3", "Quickly change to equipment quick bar slot 3.");
 
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InitState_Spawned, "InitState.Spawned", "1: Actor/component has initially spawned and can be extended");
 	UE_DEFINE_GAMEPLAY_TAG_COMMENT(InitState_DataAvailable, "InitState.DataAvailable", "2: All required data has been loaded/replicated and is ready for initialization");

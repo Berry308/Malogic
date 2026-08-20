@@ -34,7 +34,7 @@ bool UMalogicGA_RotateToRaycastTarget::CalculateDeployTransform(const FGameplayA
 	PlayerController->GetPlayerViewPoint(CameraLocation, CameraRotation);
 
 	constexpr float TraceDistance = 10000.0f;
-	constexpr float DefaultDeployDistance = 200.0f;
+	constexpr float DefaultDeployDistance = 100.0f;
 	const FVector CameraDirection = CameraRotation.Vector().GetSafeNormal();
 	if (CameraDirection.IsNearlyZero())
 	{
@@ -45,21 +45,19 @@ bool UMalogicGA_RotateToRaycastTarget::CalculateDeployTransform(const FGameplayA
 	FHitResult HitResult;
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(RotateToRaycastTarget), false, AvatarPawn);
 	const FVector TargetPoint = World->LineTraceSingleByChannel(
-		HitResult,
-		CameraLocation,
-		TraceEnd,
-		ECC_GameTraceChannel1,
-		QueryParams)
+		HitResult,CameraLocation,
+		TraceEnd,ECC_GameTraceChannel1,QueryParams)
 		? HitResult.ImpactPoint
 		: TraceEnd;
 
-	const FVector Direction = (TargetPoint - AvatarPawn->GetActorLocation()).GetSafeNormal();
+	const FVector Start = AvatarPawn->GetActorLocation()+ FVector(0,0,20.f);
+	const FVector Direction = (TargetPoint - Start).GetSafeNormal();
 	if (Direction.IsNearlyZero())
 	{
 		return false;
 	}
 
-	const FVector DeployLocation = AvatarPawn->GetActorLocation() + Direction * DefaultDeployDistance;
+	const FVector DeployLocation = Start + Direction * DefaultDeployDistance;
 	OutDeployTransform = FTransform(Direction.Rotation(), DeployLocation);
 	return true;
 }

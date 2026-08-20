@@ -24,6 +24,8 @@ AMalogicMagicCircleInstance::AMalogicMagicCircleInstance()
 	AbilitySystemComponent = CreateDefaultSubobject<UMalogicAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 
+	CombatSet = CreateDefaultSubobject<UMalogicCombatSet>(TEXT("CombatSet"));
+
 	HealthComponent = CreateDefaultSubobject<UMalogicHealthComponent>(TEXT("HealthComponent"));
 
 	SetNetUpdateFrequency(100.0f);

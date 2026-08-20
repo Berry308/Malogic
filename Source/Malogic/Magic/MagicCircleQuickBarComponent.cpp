@@ -18,9 +18,10 @@ void UMagicCircleQuickBarComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GetOwner() && GetOwner()->HasAuthority() && Slots.Num() < NumSlots)
+	if (GetOwner() && GetOwner()->HasAuthority())
 	{
-		Slots.AddDefaulted(NumSlots - Slots.Num());
+		Slots = DefaultSlots;
+		Slots.SetNum(NumSlots);
 	}
 }
 

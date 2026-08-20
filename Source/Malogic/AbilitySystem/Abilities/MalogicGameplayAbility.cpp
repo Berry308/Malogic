@@ -36,7 +36,7 @@ UMalogicGameplayAbility::UMalogicGameplayAbility(const FObjectInitializer& Objec
 	NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::LocalPredicted;
 	NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ClientOrServer;
 
-	ActivationPolicy = EMRAbilityActivationPolicy::OnInputTriggered;
+	ActivationPolicy = EMalogicAbilityActivationPolicy::OnInputTriggered;
 	ActivationGroup = EMRAbilityActivationGroup::Independent;
 
 	bLogCancelation = false;
@@ -409,7 +409,7 @@ void UMalogicGameplayAbility::GetAbilitySource(FGameplayAbilitySpecHandle Handle
 void UMalogicGameplayAbility::TryActivateAbilityOnSpawn(const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilitySpec& Spec) const
 {
 	// Try to activate if activation policy is on spawn.
-	if (ActorInfo && !Spec.IsActive() && (ActivationPolicy == EMRAbilityActivationPolicy::OnSpawn))
+	if (ActorInfo && !Spec.IsActive() && (ActivationPolicy == EMalogicAbilityActivationPolicy::OnSpawn))
 	{
 		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
 		const AActor* AvatarActor = ActorInfo->AvatarActor.Get();

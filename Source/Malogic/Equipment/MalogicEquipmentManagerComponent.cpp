@@ -78,8 +78,16 @@ UMalogicEquipmentInstance* FMalogicEquipmentList::AddEntry(TSubclassOf<UMalogicE
 
 	if (UMalogicAbilitySystemComponent* ASC = GetAbilitySystemComponent())
 	{
-		for (const TObjectPtr<const UAbilitySet>& AbilitySet : EquipmentCDO->AbilitySetsToGrant)
+		for (int32 AbilitySetIndex = 0; AbilitySetIndex < EquipmentCDO->AbilitySetsToGrant.Num(); ++AbilitySetIndex)
 		{
+			const UAbilitySet* AbilitySet = EquipmentCDO->AbilitySetsToGrant[AbilitySetIndex].Get();
+			if (!IsValid(AbilitySet))
+			{
+				UE_LOG(LogMalogic, Warning, TEXT("Equipment definition [%s] has an invalid AbilitySet at index [%d]."),
+					*GetNameSafe(EquipmentCDO), AbilitySetIndex);
+				continue;
+			}
+
 			AbilitySet->GiveToAbilitySystem(ASC, &NewEntry.GrantedHandles, Result);
 		}
 	}
@@ -162,6 +170,9 @@ void UMalogicEquipmentManagerComponent::UnequipItem(UMalogicEquipmentInstance* I
 	}
 }
 
+//重写这个函数的原因：
+//EquipmentList不是 Actor，也不是默认组件，因此不会像 Actor 那样自动拥有独立的网络复制通道。UE不会自动发现并复制
+//明确告诉UE：这个组件拥有以下 UObject 子对象，请把它们作为网络子对象复制给客户端。
 bool UMalogicEquipmentManagerComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* RepFlags)
 {
 	bool WroteSomething = Super::ReplicateSubobjects(Channel, Bunch, RepFlags);

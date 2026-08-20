@@ -21,6 +21,7 @@ class UMalogicAbilitySystemComponent;
 class UMalogicCharacterMovementComp;
 class UMalogicHealthComponent;
 class UMalogicPawnExtensionComponent;
+class USpringArmComponent;
 class USkeletalMeshComponent;
 struct FGameplayTag;
 struct FGameplayTagContainer;
@@ -39,6 +40,15 @@ public:
 
 	USkeletalMeshComponent* GetFirstPersonMesh() const { return FirstPersonMesh; }
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+	USpringArmComponent* GetThirdPersonCameraBoom() const { return ThirdPersonCameraBoom; }
+	UCameraComponent* GetThirdPersonCameraComponent() const { return ThirdPersonCameraComponent; }
+
+	/** Enables the reserved first-person setup. The default player view is third-person. */
+	UFUNCTION(BlueprintCallable, Category = "Malogic|Character|Camera")
+	void SetFirstPersonViewEnabled(bool bEnabled);
+
+	UFUNCTION(BlueprintPure, Category = "Malogic|Character|Camera")
+	bool IsFirstPersonViewEnabled() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Malogic|Character")
 	AMalogicPlayerState* GetMalogicPlayerState() const;
@@ -58,6 +68,7 @@ public:
 	FString CharacterFormalName;
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void Reset() override;
 	virtual void NotifyControllerChanged() override;
 
@@ -103,4 +114,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Malogic|Character", Meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UCameraComponent> FirstPersonCameraComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Malogic|Character", Meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USpringArmComponent> ThirdPersonCameraBoom;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Malogic|Character", Meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraComponent> ThirdPersonCameraComponent;
 };

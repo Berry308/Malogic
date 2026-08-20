@@ -24,6 +24,12 @@ namespace MalogicGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Look_Stick);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_Crouch);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_AutoRun);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeMagic1);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeMagic2);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeMagic3);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeEquipment1);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeEquipment2);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InputTag_QuickChangeEquipment3);
 
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_Spawned);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(InitState_DataAvailable);

@@ -175,6 +175,13 @@ TArray<FGameplayTag> ActivationTags // 目前用于内部按标签查找和激�
 + 处理构建、激活、受击、释放和销毁；
 + 负责把血量归零转换为服务器权威的销毁流程。
 
+### 实例类型与扩展原则
+
++ 默认使用通用的 `AMalogicMagicCircleInstance`，魔法之间的数值差异、能力差异和表现差异优先通过 Definition CDO、AbilitySet、GameplayEffect 和 GameplayCue 配置；
++ 不为每一种具体魔法创建 C++ `MagicCircleInstance` 子类。只有在出现独特的运行时状态、生命周期、复制需求，或需要专用 ActorComponent、移动/物理逻辑时，才增加 C++ 子类；
++ 当前阶段不在实例中保存 `MaxShootDistance`、`BeamRadius` 等仅用于计算的静态数值，相关能力直接从本次 AbilitySpec 的 SourceObject 获取 Definition CDO；
++ 如果未来需要运行时修改并复制某类魔法阵数值，应优先通过专用 AttributeSet 和 GameplayEffect 实现，而不是在每个实例子类中增加普通浮点成员。
+
 ### 所有权与网络约定
 + `bReplicates = true`。魔法阵通常是固定位置 Actor，不需要复制移动，除非某种魔法明确要求移动；
 + ASC 的 `OwnerActor` 、`Instigator`和 `AvatarActor` 都指向该魔法阵实例。用于EffectContext、伤害归属计算BaseDamage用魔法阵实例；
@@ -208,7 +215,7 @@ TArray<FGameplayTag> ActivationTags // 目前用于内部按标签查找和激�
 
 ### 魔法阵激活策略
 
-定义枚举类 `EMagicCircleActivateStrategy` 描述魔法阵激活策略。该枚举属于 `MagicCircleInstance` 的默认配置，由具体的魔法阵实例子类在 Blueprint 编辑器中指定；Definition 不负责覆盖该配置。
+定义枚举类 `EMagicCircleActivateStrategy` 描述魔法阵激活策略。该枚举属于 `MagicCircleInstance` 的默认配置，通常在 `MagicCircleToSpawn` 指向的 Blueprint 类中指定；Definition 不负责覆盖该配置。
 
 + 自动激活
 + 玩家手动激活
@@ -422,9 +429,11 @@ UCLASS(Blueprintable, Const, Abstract, BlueprintType)
 
 设计约定：
 
-+ 每一种魔法阵创建一个 Blueprint 子类，运行时通过 `TSubclassOf<UMagicCircleDefinition>` 持有该类型。
++ 具体魔法默认使用 Definition 基类的 Blueprint 类/类默认对象配置静态数据，运行时通过 `TSubclassOf<UMagicCircleDefinition>` 持有该类型；不为每一种具体魔法新增 C++ Definition 子类。
 + 需要读取配置时，通过该类的 CDO 获取 Definition 数据。
 + Definition 内的引用均为静态配置引用；运行时生成的 `MagicCircleInstance`、AbilitySpec 和 GrantedHandles 不保存在 Definition 中。
++ 只有当某一类魔法需要新增一组稳定且类型明确的配置字段时，才考虑增加按“魔法家族”划分的 C++ Definition 子类；具体魔法变体仍优先使用其 Blueprint 子类/类默认对象配置。
++ 当前 Definition 中的数值只作为静态初始配置使用；未来需要运行时修改的数值，应转移到魔法阵 ASC 的 AttributeSet，并通过 GameplayEffect 修改。
 
 ## 成员
 变量：
@@ -433,21 +442,22 @@ TSubclassOf<AMalogicMagicCircleInstance> MagicCircleToSpawn //部署时生成的
 
 FInputMappingContextAndPriority DeploymentInputMapping //装备该魔法阵时追加的本地输入映射
 
+TSubclassOf<AActor> PreviewActor //预部署时显示的本地轮廓 Actor 类型
+
+TSubclassOf<AActor> ViewActorForPrediction //用于客户端预测画面表现生成的轻量Actor
+
+TObjectPtr<const UAbilitySet> AbilitySetForPlayer //赋予玩家部署该魔法阵的能力
+
+TObjectPtr<const UAbilitySet> AbilitySetForMagicCircle //赋予魔法阵实例的 AbilitySet，包括属性集、初始化 GE 和魔法能力
+
 bool bIsPreDeploy //是否需要显示本地预部署轮廓
 
 bool bIsLifetimeFollowInstigator //魔法阵是否随玩家死亡而销毁（在部署的时候，该选项为true的MagicCircleInstance指针会被添加到MagicCircleManagerComponent成员数组TArray<TObjectPtr<MagicCircleInstance>> MagicCircleFollowPlayerLifetime中
 
 float BaseBuildingTime //魔法阵构建的基本时间，在MalogicGA_(MagicName)Deploy中会根据武器属性以及一些可能的状态计算魔法阵的实际构建时间
 
-TSubclassOf<AActor> PreviewActor //预部署时显示的本地轮廓 Actor 类型
-
-TSubclassOf<AActor> ViewActorForPrediction //用于客户端预测画面表现生成的轻量Actor
-
 float BaseMaxDeployDistance //魔法阵最大释放距离
 
-TObjectPtr<const UAbilitySet> AbilitySetForPlayer //赋予玩家部署该魔法阵的能力
-
-TObjectPtr<const UAbilitySet> AbilitySetForMagicCircle //赋予魔法阵实例的 AbilitySet，包括属性集、初始化 GE 和魔法能力
 
 ## 运行时与网络
 
@@ -732,7 +742,7 @@ void OnRep_ActiveSlotIndex();
 ## 切换流程
 
 1. 本地输入请求 `SetActiveSlotIndex`。
-2. 服务器校验索引和槽位内容。
+2. 服务器校验索引和槽位内容，并统一检查 Definition CDO 的必需配置（生成类、AbilitySet、距离、构建时间和条件必需的预部署 Actor）。任一项失败都使用 `Error` 日志并拒绝装备，不改变当前状态；装备成功后的能力可以直接使用已验证的静态 CDO 数值。
 3. 服务器调用 `UnequipMagicCircleInSlot`，更新 `ActiveSlotIndex`，再调用 `EquipMagicCircleInSlot`；两个辅助函数通过 Pawn 上的 `MagicCircleManagerComponent` 卸载旧 Definition 并装备新槽位的 Definition。
 4. 复制索引和槽位变化；客户端在 `OnRep` 中刷新 UI、预部署轮廓和本地输入表现。
 
@@ -1015,7 +1025,7 @@ ActivationBlockedTags.AddTag(TAG_MagicWeaponFireBlocked);
 
 ## 成员
 + TSubclassOf<AMalogicMagicCircleInstance> MagicCircleToSpawn //部署时生成的魔法阵实例类型
-MC_LightBeam（创建自MagicCircle_LightBeam的蓝图子类）
+MC_LightBeam（创建自 `AMalogicMagicCircleInstance` 的蓝图子类，用于配置通用生命周期字段和 `FinishAbilityClass = MalogicGA_LightBeamShoot`）
 
 + FInputMappingContextAndPriority DeploymentInputMapping //装备该魔法阵时追加的本地输入映射
 鼠标左键 -> MagicCircleDeployAction（InputTag：DeployMagicCircle）
@@ -1036,25 +1046,29 @@ false
 + float BaseMaxDeployDistance //魔法阵最大部署距离
 
 + TObjectPtr<const UAbilitySet> AbilitySetForPlayer //赋予玩家部署该魔法阵的能力
-MalogicGA_RotateToRaycastTarget（InputTag：DeployMagicCircle）
+MalogicGA_RotateToRaycastTarget（InputTag：DeployMagicCircle）(为了添加AbilityCost，或许需要衍生子类)
 
 + TObjectPtr<const UAbilitySet> AbilitySetForMagicCircle //赋予魔法阵实例的 AbilitySet，包括属性集、初始化 GE 和魔法能力
 MalogicGA_LightBeamShoot（ActivationTag:MagicCircle_Ability_Activate）
 HealthSet、CombatSet
 魔法阵血量初始化GE,魔法阵
 
-### 新增成员
-float MaxShootDistance
-float BeamRadius
+### 光束参数
+float MaxShootDistance //光束最大射击距离，当前为 Definition CDO 中的静态配置
+float BeamRadius //光束扫描半径，当前为 Definition CDO 中的静态配置
+
+当前不创建 `MagicCircle_LightBeam` C++ 实例子类。`MalogicGA_LightBeamShoot` 从本次 AbilitySpec 的 SourceObject 获取 `MCD_LightBeam` Definition CDO，并直接读取 `MaxShootDistance` 和 `BeamRadius`；实例只负责通用生命周期、ASC 和 AbilitySet。
 
 # MalogicGA_FromMagicCircle
 ## 概述
-由 MagicCircle 持有的 GA，由 MagicCircle 选择时机激活
+由 MagicCircle 持有的 GA，由 MagicCircle 选择时机激活。服务器执行的GA
 基类：UMalogicGameplayAbility
 
 ## 成员函数
-void OnMagicHit()
-void K2_OnMagicHit()
++ MalogicGA_FromMagicCircle()
+NetExecutionPolicy = EGameplayAbilityNetExecutionPolicy::ServerInitiated;
+NetSecurityPolicy = EGameplayAbilityNetSecurityPolicy::ServerOnlyExecution;
+ReplicationPolicy = EGameplayAbilityReplicationPolicy::ReplicateNo;
 
 # MalogicGA_LightBeamShoot
 ## 概述
@@ -1064,30 +1078,16 @@ void K2_OnMagicHit()
 + 进行扫描检测
 在激活的时候，从起点到终点应用球状扫描检测。扫描检测需要忽略魔法阵自身、部署者及其附属组件。使用SweepSingle，通道使用ECC_GameTraceChannel1（Projectile）。
 + 起点：魔法阵实例的前向向量（GetActorForwardVector）10.0f处
-+ 终点：获取魔法阵实例内部定义成员MaxShootDistance，以起点为坐标，魔法阵前向向量为方向计算。
-+ 扫描半径：从魔法阵实例内部定义成员BeamRadius获取。
++ 终点：从本次 AbilitySpec 的 SourceObject 获取 Definition CDO 中的 `MaxShootDistance`，以起点为坐标，魔法阵前向向量为方向计算。
++ 扫描半径：从本次 AbilitySpec 的 SourceObject 获取 Definition CDO 中的 `BeamRadius`。
++ 如果扫描命中目标，在服务器上调用 `K2_OnMagicHit(const FHitResult& HitResult)`，该函数为 `BlueprintImplementableEvent`，由蓝图根据命中数据应用 GameplayEffect；未命中时不调用该函数。
++ 最后通过 GameplayCue 通知所有客户端渲染光束，Tag 为 `GameplayCue.Magic.LightBeam`。GameplayCue 参数约定为：`Location` 保存光束起点，`Normal` 保存光束方向，`RawMagnitude` 保存光束长度，命中数据写入 `EffectContext` 的 `HitResult`；命中时光束终点为 `HitResult.ImpactPoint`，未命中时终点为最大射击距离。
 ## 成员函数
++ ActivateAbility
 
+`K2_OnMagicHit(const FHitResult& HitResult)`
++ `UFUNCTION(BlueprintImplementableEvent)`；
++ 仅服务器在 `SweepSingle` 成功命中时调用；
++ 蓝图负责根据 `HitResult` 查找目标 ASC 并应用 GameplayEffect，C++ 不硬编码具体伤害效果。
 
-# MagicCircle_LightBeam
-## 概述
-光束射击魔法阵实例，具有射击距离、射击检测半径的动态数值。可以在初始化时，修改数值。可以在运行时被外部修改，如buff。
-基类：UMalogicMagicCircleInstance
-职责：
-+ 存储激活魔法GA时
-+ 构建完毕即释放的魔法阵，释放完毕即销毁的魔法阵
-
-## 成员变量
-ActivateStrategy = Auto
-LifetimeStrategy = OnceAfterSomeGA
-FinishAbilityClass = MalogicGA_LightBeamShoot
-float MaxShootDistance
-float BeamRadius
-
-## 成员函数
-+ virtual void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
-在调用父类逻辑的基础上，添加对MagicCircleDefinition中MaxShootDistance和BeamRadius的获取以及初始化
-
-## 问题
-+ 不同魔法阵实例需要的初始化数据不一，应该怎么做？
-前面定义了MalogicGATargetData_MagicCircleSpawnInfo，在 `SpawnMagicCircleInstance` 中传入该结构体，并在 `MagicCircleInstance` 中提供 `virtual void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)`。子类可在此函数中添加自定义初始化逻辑。
+## 成员

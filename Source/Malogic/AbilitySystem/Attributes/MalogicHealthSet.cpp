@@ -150,7 +150,7 @@ void UMalogicHealthSet::PostGameplayEffectExecute(const FGameplayEffectModCallba
 	else if (Data.EvaluatedData.Attribute == GetMaxHealthAttribute())
 	{
 		// TODO clamp current health?
-
+		SetHealth(FMath::Clamp(GetHealth(), MinimumHealth, GetMaxHealth()));
 		// Notify on any requested max health changes
 		OnMaxHealthChanged.Broadcast(Instigator, Causer, &Data.EffectSpec, Data.EvaluatedData.Magnitude, MaxHealthBeforeAttributeChange, GetMaxHealth());
 	}

@@ -10,6 +10,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameModes/MalogicGameMode.h"
+#include "GameFramework/SpringArmComponent.h"
 #include "MalogicGameplayTags.h"
 #include "Player/MalogicPlayerController.h"
 #include "Player/MalogicPlayerState.h"
@@ -35,15 +36,6 @@ AMalogicCharacter::AMalogicCharacter(const FObjectInitializer& ObjectInitializer
 	check(CapsuleComp);
 	CapsuleComp->InitCapsuleSize(40.0f, 90.0f);
 	//CapsuleComp->SetCollisionProfileName(MalogicCharacter::CapsuleCollisionProfile);
-
-	USkeletalMeshComponent* MeshComponent = GetMesh();
-	check(MeshComponent);
-	MeshComponent->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
-	//MeshComponent->SetCollisionProfileName(MalogicCharacter::MeshCollisionProfile);
-	MeshComponent->SetOwnerNoSee(true);
-	MeshComponent->CastShadow = true;
-	MeshComponent->bCastHiddenShadow = true;
-	MeshComponent->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::WorldSpaceRepresentation;
 
 	UMalogicCharacterMovementComp* MovementComponent = CastChecked<UMalogicCharacterMovementComp>(GetCharacterMovement());
 	MovementComponent->GravityScale = 1.0f;
@@ -75,6 +67,7 @@ AMalogicCharacter::AMalogicCharacter(const FObjectInitializer& ObjectInitializer
 	FirstPersonMesh->bCastDynamicShadow = false;
 	FirstPersonMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
 	FirstPersonMesh->SetCollisionProfileName(TEXT("NoCollision"));
+	FirstPersonMesh->SetVisibility(false);
 
 	FirstPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("First Person Camera"));
 	FirstPersonCameraComponent->SetupAttachment(FirstPersonMesh, TEXT("head"));
@@ -84,12 +77,74 @@ AMalogicCharacter::AMalogicCharacter(const FObjectInitializer& ObjectInitializer
 	FirstPersonCameraComponent->bEnableFirstPersonScale = true;
 	FirstPersonCameraComponent->FirstPersonFieldOfView = 90.0f;
 	FirstPersonCameraComponent->FirstPersonScale = 0.6f;
+	FirstPersonCameraComponent->SetAutoActivate(false);
+
+
+	USkeletalMeshComponent* MeshComponent = GetMesh();
+	check(MeshComponent);
+	MeshComponent->SetRelativeRotation(FRotator(0.0f, -90.0f, 0.0f));
+	//MeshComponent->SetCollisionProfileName(MalogicCharacter::MeshCollisionProfile);
+	MeshComponent->SetOwnerNoSee(false);
+	MeshComponent->CastShadow = true;
+	MeshComponent->bCastHiddenShadow = true;
+	MeshComponent->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::None;
+
+	ThirdPersonCameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("Third Person Camera Boom"));
+	ThirdPersonCameraBoom->SetupAttachment(CapsuleComp);
+	ThirdPersonCameraBoom->SetRelativeLocation(FVector(0.0f, 0.0f, 70.0f));
+	ThirdPersonCameraBoom->TargetArmLength = 300.0f;
+	ThirdPersonCameraBoom->bUsePawnControlRotation = true;
+	ThirdPersonCameraBoom->bDoCollisionTest = true;
+
+	ThirdPersonCameraComponent = CreateDefaultSubobject<UCameraComponent>(TEXT("Third Person Camera"));
+	ThirdPersonCameraComponent->SetupAttachment(ThirdPersonCameraBoom, USpringArmComponent::SocketName);
+	ThirdPersonCameraComponent->bUsePawnControlRotation = false;
+	ThirdPersonCameraComponent->SetAutoActivate(true);
 
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = true;
 	bUseControllerRotationRoll = false;
 	BaseEyeHeight = 80.0f;
 	CrouchedEyeHeight = 50.0f;
+}
+
+void AMalogicCharacter::SetFirstPersonViewEnabled(bool bEnabled)
+{
+	if (FirstPersonCameraComponent)
+	{
+		FirstPersonCameraComponent->SetActive(bEnabled);
+	}
+
+	if (ThirdPersonCameraComponent)
+	{
+		ThirdPersonCameraComponent->SetActive(!bEnabled);
+	}
+
+	if (FirstPersonMesh)
+	{
+		FirstPersonMesh->SetVisibility(bEnabled);
+	}
+
+	if (USkeletalMeshComponent* MeshComponent = GetMesh())
+	{
+		MeshComponent->SetOwnerNoSee(bEnabled);
+		MeshComponent->SetFirstPersonPrimitiveType(bEnabled
+			? EFirstPersonPrimitiveType::WorldSpaceRepresentation
+			: EFirstPersonPrimitiveType::None);
+	}
+}
+
+bool AMalogicCharacter::IsFirstPersonViewEnabled() const
+{
+	return FirstPersonCameraComponent && FirstPersonCameraComponent->IsActive();
+}
+
+void AMalogicCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Apply the default view at runtime so stale Blueprint component settings cannot hide the third-person mesh.
+	SetFirstPersonViewEnabled(false);
 }
 
 void AMalogicCharacter::Reset()

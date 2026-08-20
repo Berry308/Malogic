@@ -10,6 +10,7 @@
 class FLifetimeProperty;
 class UMalogicInventoryItemDefinition;
 class UMalogicInventoryItemFragment;
+class UInventoryItemSpawnerSubsystem;
 struct FFrame;
 struct FGameplayTag;
 
@@ -50,6 +51,7 @@ private:
 	void SetItemDef(TSubclassOf<UMalogicInventoryItemDefinition> InDef);
 
 	friend struct FMalogicInventoryList;
+	friend class UInventoryItemSpawnerSubsystem;
 
 private:
 	UPROPERTY(Replicated)

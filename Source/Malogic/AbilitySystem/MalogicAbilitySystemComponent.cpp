@@ -144,8 +144,8 @@ void UMalogicAbilitySystemComponent::CancelInputActivatedAbilities(bool bReplica
 {
 	auto ShouldCancelFunc = [this](const UMalogicGameplayAbility* LyraAbility, FGameplayAbilitySpecHandle Handle)
 		{
-			const EMRAbilityActivationPolicy ActivationPolicy = LyraAbility->GetActivationPolicy();
-			return ((ActivationPolicy == EMRAbilityActivationPolicy::OnInputTriggered) || (ActivationPolicy == EMRAbilityActivationPolicy::WhileInputActive));
+			const EMalogicAbilityActivationPolicy ActivationPolicy = LyraAbility->GetActivationPolicy();
+			return ((ActivationPolicy == EMalogicAbilityActivationPolicy::OnInputTriggered) || (ActivationPolicy == EMalogicAbilityActivationPolicy::WhileInputActive));
 		};
 
 	CancelAbilitiesByFunc(ShouldCancelFunc, bReplicateCancelAbility);
@@ -165,10 +165,10 @@ void UMalogicAbilitySystemComponent::AbilitySpecInputPressed(FGameplayAbilitySpe
 		FPredictionKey OriginalPredictionKey = Instance ? Instance->GetCurrentActivationInfo().GetActivationPredictionKey() : Spec.ActivationInfo.GetActivationPredictionKey();
 		PRAGMA_ENABLE_DEPRECATION_WARNINGS
 
-			// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
-			// 这不是真正的网络同步，如果有人正在监听该事件（如WaitInput AbilityTask），它们会发起真正的同步
-			// 这样做的原因是清除不必要的同步开销，如果没有AbilityTask在监听不会产生任何网络流量
-			InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, OriginalPredictionKey);
+		// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
+		// 这不是真正的网络同步，如果有人正在监听该事件（如WaitInput AbilityTask），它们会发起真正的同步
+		// 这样做的原因是清除不必要的同步开销，如果没有AbilityTask在监听不会产生任何网络流量
+		InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, Spec.Handle, OriginalPredictionKey);
 	}
 }
 
@@ -244,7 +244,7 @@ void UMalogicAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool b
 			if (AbilitySpec->Ability && !AbilitySpec->IsActive())
 			{
 				const UMalogicGameplayAbility* LyraAbilityCDO = Cast<UMalogicGameplayAbility>(AbilitySpec->Ability);
-				if (LyraAbilityCDO && LyraAbilityCDO->GetActivationPolicy() == EMRAbilityActivationPolicy::WhileInputActive)
+				if (LyraAbilityCDO && LyraAbilityCDO->GetActivationPolicy() == EMalogicAbilityActivationPolicy::WhileInputActive)
 				{
 					AbilitiesToActivate.AddUnique(AbilitySpec->Handle);
 				}
@@ -272,7 +272,7 @@ void UMalogicAbilitySystemComponent::ProcessAbilityInput(float DeltaTime, bool b
 				{
 					const UMalogicGameplayAbility* LyraAbilityCDO = Cast<UMalogicGameplayAbility>(AbilitySpec->Ability);
 
-					if (LyraAbilityCDO && LyraAbilityCDO->GetActivationPolicy() == EMRAbilityActivationPolicy::OnInputTriggered)
+					if (LyraAbilityCDO && LyraAbilityCDO->GetActivationPolicy() == EMalogicAbilityActivationPolicy::OnInputTriggered)
 					{
 						AbilitiesToActivate.AddUnique(AbilitySpec->Handle);
 					}

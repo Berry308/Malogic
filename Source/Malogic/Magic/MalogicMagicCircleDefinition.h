@@ -52,6 +52,12 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle")
 	EMagicCircleDeployStrategy DeployStrategy = EMagicCircleDeployStrategy::CameraRaycast;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle|Light Beam", meta = (ClampMin = "0.0"))
+	float MaxShootDistance = 0.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle|Light Beam", meta = (ClampMin = "0.0"))
+	float BeamRadius = 0.0f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Ability Sets")
 	TObjectPtr<const UAbilitySet> AbilitySetForPlayer;
 

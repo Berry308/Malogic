@@ -9,9 +9,11 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(Abstract)
 class MALOGIC_API UMalogicGA_FromMagicCircle : public UMalogicGameplayAbility
 {
 	GENERATED_BODY()
-	
+
+public:
+	UMalogicGA_FromMagicCircle(const FObjectInitializer& ObjectInitializer = FObjectInitializer::Get());
 };

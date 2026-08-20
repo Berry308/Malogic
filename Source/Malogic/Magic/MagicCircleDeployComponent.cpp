@@ -78,7 +78,7 @@ void UMagicCircleDeployComponent::HandleMagicCirclePreDeploy(TSubclassOf<UMalogi
 
 	if (!MagicCircleDefinition)
 	{
-		UE_LOG(LogMalogic, Error, TEXT("MagicCircleDeployComponent [%s] received a null magic circle definition."), *GetNameSafe(this));
+		UE_LOG(LogMalogic, Log, TEXT("UMagicCircleDeployComponent::HandleMagicCirclePreDeploy received a null magic circle definition."), *GetNameSafe(this));
 		return;
 	}
 

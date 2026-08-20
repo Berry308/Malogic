@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "InputMappingContext.h"
 #include "Magic/MalogicMagicCircleDefinition.h"
+#include "Magic/MalogicMagicCircleInstance.h"
 #include "MalogicLogChannels.h"
 #include "Net/UnrealNetwork.h"
 #include "UserSettings/EnhancedInputUserSettings.h"
@@ -135,9 +136,62 @@ bool UMagicCircleManagerComponent::EquipMagicCircle(TSubclassOf<UMalogicMagicCir
 		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] could not get the CDO for definition [%s]."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle));
 		return false;
 	}
+
+	bool bDefinitionIsValid = true;
+
+#pragma region Validation
+	if (!NewDefinition->MagicCircleToSpawn)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because MagicCircleToSpawn is not configured."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle));
+		bDefinitionIsValid = false;
+	}
+	
+
 	if (!NewDefinition->AbilitySetForPlayer)
 	{
 		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because AbilitySetForPlayer is not configured."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle));
+		bDefinitionIsValid = false;
+	}
+
+	if (!NewDefinition->AbilitySetForMagicCircle)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because AbilitySetForMagicCircle is not configured."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle));
+		bDefinitionIsValid = false;
+	}
+
+	if (!FMath::IsFinite(NewDefinition->BaseBuildingTime) || NewDefinition->BaseBuildingTime < 0.0f)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because BaseBuildingTime [%f] is invalid."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle), NewDefinition->BaseBuildingTime);
+		bDefinitionIsValid = false;
+	}
+
+	if (!FMath::IsFinite(NewDefinition->BaseMaxDeployDistance) || NewDefinition->BaseMaxDeployDistance < 0.0f)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because BaseMaxDeployDistance [%f] is invalid."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle), NewDefinition->BaseMaxDeployDistance);
+		bDefinitionIsValid = false;
+	}
+
+	if (!FMath::IsFinite(NewDefinition->MaxShootDistance) || NewDefinition->MaxShootDistance <= 0.0f)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because MaxShootDistance [%f] is invalid."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle), NewDefinition->MaxShootDistance);
+		bDefinitionIsValid = false;
+	}
+
+	if (!FMath::IsFinite(NewDefinition->BeamRadius) || NewDefinition->BeamRadius <= 0.0f)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because BeamRadius [%f] is invalid."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle), NewDefinition->BeamRadius);
+		bDefinitionIsValid = false;
+	}
+
+	if (NewDefinition->bIsPreDeploy && !NewDefinition->PreviewActor)
+	{
+		UE_LOG(LogMalogic, Error, TEXT("MagicCircleManagerComponent [%s] rejected definition [%s] because bIsPreDeploy is enabled but PreviewActor is not configured."), *GetNameSafe(this), *GetNameSafe(NewMagicCircle));
+		bDefinitionIsValid = false;
+	}
+#pragma endregion
+
+	if (!bDefinitionIsValid)
+	{
 		return false;
 	}
 

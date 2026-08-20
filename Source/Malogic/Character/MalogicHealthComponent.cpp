@@ -55,7 +55,7 @@ void UMalogicHealthComponent::InitializeWithAbilitySystem(UMalogicAbilitySystemC
 	HealthSet = AbilitySystemComponent->GetSet<UMalogicHealthSet>();
 	if (!HealthSet)
 	{
-		UE_LOG(LogMalogic, Error, TEXT("Cannot initialize MalogicHealthComponent for owner [%s]: the ability system has no health set."), *GetNameSafe(Owner));
+		UE_LOG(LogMalogic, Warning, TEXT("Cannot initialize MalogicHealthComponent for owner [%s]: the ability system has no health set."), *GetNameSafe(Owner));
 		AbilitySystemComponent = nullptr;
 		return;
 	}

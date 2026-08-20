@@ -2,6 +2,7 @@
 
 #include "AbilitySystem/AbilitySet.h"
 #include "Character/MalogicHeroComponent.h"
+#include "MalogicMagicCircleDefinition.h"
 #include "CoreMinimal.h"
 #include "Components/PawnComponent.h"
 #include "MagicCircleManagerComponent.generated.h"
@@ -9,7 +10,6 @@
 class AController;
 class APawn;
 class UMalogicAbilitySystemComponent;
-class UMalogicMagicCircleDefinition;
 class UEnhancedInputLocalPlayerSubsystem;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FMagicCircleDefinitionChanged, TSubclassOf<UMalogicMagicCircleDefinition>);

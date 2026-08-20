@@ -78,6 +78,12 @@ protected:
 	void Input_LookMouse(const FInputActionValue& InputActionValue);
 	void Input_LookStick(const FInputActionValue& InputActionValue);
 	void Input_Crouch(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeMagic1(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeMagic2(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeMagic3(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeEquipment1(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeEquipment2(const FInputActionValue& InputActionValue);
+	void Input_QuickChangeEquipment3(const FInputActionValue& InputActionValue);
 
 
 protected:

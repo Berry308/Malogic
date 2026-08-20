@@ -2,11 +2,16 @@
 
 #include "MalogicQuickBarComponent.h"
 
+#include "Engine/GameInstance.h"
+#include "Engine/ActorChannel.h"
+#include "Engine/World.h"
 #include "Equipment/MalogicEquipmentDefinition.h"
 #include "Equipment/MalogicEquipmentInstance.h"
 #include "Equipment/MalogicEquipmentManagerComponent.h"
 #include "GameFramework/Pawn.h"
+#include "Inventory/InventoryItemSpawnerSubsystem.h"
 #include "Inventory/InventoryFragment_EquippableItem.h"
+#include "MalogicLogChannels.h"
 #include "NativeGameplayTags.h"
 #include "Net/UnrealNetwork.h"
 
@@ -19,7 +24,6 @@ UMalogicQuickBarComponent::UMalogicQuickBarComponent(const FObjectInitializer& O
 	: Super(ObjectInitializer)
 {
 	SetIsReplicatedByDefault(true);
-	
 }
 
 void UMalogicQuickBarComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -29,10 +33,71 @@ void UMalogicQuickBarComponent::GetLifetimeReplicatedProps(TArray<FLifetimePrope
 	DOREPLIFETIME(ThisClass, ActiveSlotIndex);
 }
 
+bool UMalogicQuickBarComponent::ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* RepFlags)
+{
+	bool bWroteSomething = Super::ReplicateSubobjects(Channel, Bunch, RepFlags);
+
+	for (const TObjectPtr<UMalogicInventoryItemInstance>& Item : Slots)
+	{
+		if (Item != nullptr)
+		{
+			bWroteSomething |= Channel->ReplicateSubobject(Item, *Bunch, *RepFlags);
+		}
+	}
+
+	return bWroteSomething;
+}
+
 void UMalogicQuickBarComponent::BeginPlay()
 {
 	if (Slots.Num() < NumSlots) Slots.AddDefaulted(NumSlots - Slots.Num());
 	Super::BeginPlay();
+
+	if (GetOwner() && GetOwner()->HasAuthority())
+	{
+		AddDefaultItems();
+	}
+}
+
+void UMalogicQuickBarComponent::AddDefaultItems()
+{
+	if (DefaultItemDefinitions.Num() == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	UInventoryItemSpawnerSubsystem* ItemSpawner = GameInstance
+		? GameInstance->GetSubsystem<UInventoryItemSpawnerSubsystem>()
+		: nullptr;
+	if (!ItemSpawner)
+	{
+		UE_LOG(LogMalogic, Warning, TEXT("QuickBarComponent [%s] could not initialize default items because the item spawner subsystem is unavailable."), *GetNameSafe(this));
+		return;
+	}
+
+	const TArray<FGameplayTag> EmptyTags;
+	for (const TSubclassOf<UMalogicInventoryItemDefinition>& ItemDefinition : DefaultItemDefinitions)
+	{
+		if (!ItemDefinition)
+		{
+			UE_LOG(LogMalogic, Warning, TEXT("QuickBarComponent [%s] skipped a null default item definition."), *GetNameSafe(this));
+			continue;
+		}
+
+		const int32 ItemSlot = GetNextFreeItemSlot();
+		if (ItemSlot == INDEX_NONE)
+		{
+			UE_LOG(LogMalogic, Warning, TEXT("QuickBarComponent [%s] could not add default item [%s] because all slots are occupied."), *GetNameSafe(this), *GetNameSafe(ItemDefinition));
+			break;
+		}
+
+		if (UMalogicInventoryItemInstance* ItemInstance = ItemSpawner->CreateItemInstanceFromDefinition(ItemDefinition, EmptyTags, GetOwner()))
+		{
+			AddItemToSlot(ItemSlot, ItemInstance);
+		}
+	}
 }
 
 void UMalogicQuickBarComponent::CycleActiveSlotForward()

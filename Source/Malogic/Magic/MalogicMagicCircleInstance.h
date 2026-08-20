@@ -145,7 +145,7 @@ protected:
 
 private:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true", ClampMin = "0.0"))
-	float LifeTime = 0.0f;
+	float LifeTime = 5.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
 	TSubclassOf<UMalogicGameplayAbility> FinishAbilityClass;

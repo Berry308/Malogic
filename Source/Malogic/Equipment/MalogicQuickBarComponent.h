@@ -8,8 +8,12 @@
 #include "MalogicQuickBarComponent.generated.h"
 
 class AActor;
+class FOutBunch;
 class UMalogicEquipmentInstance;
 class UMalogicEquipmentManagerComponent;
+class UMalogicInventoryItemDefinition;
+class UActorChannel;
+struct FReplicationFlags;
 
 UCLASS(Blueprintable, meta=(BlueprintSpawnableComponent))
 class UMalogicQuickBarComponent : public UControllerComponent
@@ -47,15 +51,20 @@ public:
 	UMalogicInventoryItemInstance* RemoveItemFromSlot(int32 SlotIndex);
 
 	virtual void BeginPlay() override;
+	virtual bool ReplicateSubobjects(UActorChannel* Channel, FOutBunch* Bunch, FReplicationFlags* RepFlags) override;
 
 private:
 	void UnequipItemInSlot();
 	void EquipItemInSlot();
 	UMalogicEquipmentManagerComponent* FindEquipmentManager() const;
+	void AddDefaultItems();
 
 protected:
 	UPROPERTY()
 	int32 NumSlots = 3;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Inventory", meta = (AllowPrivateAccess = "true"))
+	TArray<TSubclassOf<UMalogicInventoryItemDefinition>> DefaultItemDefinitions;
 
 	UFUNCTION()
 	void OnRep_Slots();

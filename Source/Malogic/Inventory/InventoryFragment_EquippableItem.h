@@ -16,6 +16,6 @@ class UInventoryFragment_EquippableItem : public UMalogicInventoryItemFragment
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, Category=Lyra)
+	UPROPERTY(EditAnywhere)
 	TSubclassOf<UMalogicEquipmentDefinition> EquipmentDefinition;
 };

@@ -17,6 +17,8 @@
 #include "Player/MalogicLocalPlayer.h"
 #include "Input/MalogicInputConfig.h"
 #include "Input/MalogicInputComponent.h"
+#include "Equipment/MalogicQuickBarComponent.h"
+#include "Magic/MagicCircleQuickBarComponent.h"
 #include "MalogicGameplayTags.h"
 
 
@@ -175,6 +177,12 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Look_Mouse, ETriggerEvent::Triggered, this, &ThisClass::Input_LookMouse, /*bLogIfNotFound=*/ false);
 	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Look_Stick, ETriggerEvent::Triggered, this, &ThisClass::Input_LookStick, /*bLogIfNotFound=*/ false);
 	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_Crouch, ETriggerEvent::Triggered, this, &ThisClass::Input_Crouch, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeMagic1, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeMagic1, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeMagic2, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeMagic2, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeMagic3, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeMagic3, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeEquipment1, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeEquipment1, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeEquipment2, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeEquipment2, /*bLogIfNotFound=*/ false);
+	InputComp->BindNativeAction(InputConfig, MalogicGameplayTags::InputTag_QuickChangeEquipment3, ETriggerEvent::Triggered, this, &ThisClass::Input_QuickChangeEquipment3, /*bLogIfNotFound=*/ false);
 
 
 	if (ensure(!bReadyToBindInputs))
@@ -182,7 +190,6 @@ void UMalogicHeroComponent::InitializePlayerInput(UInputComponent* PlayerInputCo
 		bReadyToBindInputs = true;
 		UE_LOG(LogMalogic, Log, TEXT("HeroComponent is Ready To Bind Inputs"));
 	}
-	UE_LOG(LogMalogic, Warning, TEXT("HeroComponent is InitializePlayerInput"));
 }
 
 //被GameFeatureAction_InputBinding所使用
@@ -331,5 +338,71 @@ void UMalogicHeroComponent::Input_Crouch(const FInputActionValue& InputActionVal
 	if (AMalogicCharacter* Character = GetPawn<AMalogicCharacter>())
 	{
 		//Character->ToggleCrouch();
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeMagic1(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMagicCircleQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMagicCircleQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(0);
+		}
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeMagic2(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMagicCircleQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMagicCircleQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(1);
+		}
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeMagic3(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMagicCircleQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMagicCircleQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(2);
+		}
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeEquipment1(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMalogicQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMalogicQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(0);
+		}
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeEquipment2(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMalogicQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMalogicQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(1);
+		}
+	}
+}
+
+void UMalogicHeroComponent::Input_QuickChangeEquipment3(const FInputActionValue& InputActionValue)
+{
+	if (APlayerController* PlayerController = GetController<APlayerController>())
+	{
+		if (UMalogicQuickBarComponent* QuickBarComponent = PlayerController->FindComponentByClass<UMalogicQuickBarComponent>())
+		{
+			QuickBarComponent->SetActiveSlotIndex(2);
+		}
 	}
 }
