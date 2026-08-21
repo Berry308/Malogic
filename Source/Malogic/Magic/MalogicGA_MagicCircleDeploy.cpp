@@ -183,7 +183,7 @@ bool UMalogicGA_MagicCircleDeploy::ValidateDeploymentTargetData(const FGameplayA
 	return true;
 }
 
-AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo) const
+AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo, uint16 PredictionId) const
 {
 	if (!ActorInfo || !ActorInfo->IsNetAuthority() || !Definition || !Definition->MagicCircleToSpawn)
 	{
@@ -210,7 +210,7 @@ AMalogicMagicCircleInstance* UMalogicGA_MagicCircleDeploy::SpawnMagicCircleInsta
 	}
 
 	MagicCircleInstance->InitializeFromDefinition(Definition, AvatarPawn, ActualBuildingTime);
-	MagicCircleInstance->InitializeFromTargetData(SpawnInfo);
+	MagicCircleInstance->InitializeFromTargetData(SpawnInfo, PredictionId);
 	MagicCircleInstance->FinishSpawning(DeployTransform);
 	return IsValid(MagicCircleInstance) ? MagicCircleInstance : nullptr;
 }
@@ -314,7 +314,7 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 				AMalogicMagicCircleInstance* SpawnedMagicCircle = nullptr;
 				if (bIsTargetDataValid && SpawnInfo)
 				{
-					SpawnedMagicCircle = SpawnMagicCircleInstance(Definition, CurrentActorInfo, DeployTransform, CalculateActualBuildingTime(Definition, CurrentActorInfo), *SpawnInfo);
+					SpawnedMagicCircle = SpawnMagicCircleInstance(Definition, CurrentActorInfo, DeployTransform, CalculateActualBuildingTime(Definition, CurrentActorInfo), *SpawnInfo, LocalTargetDataHandle.UniqueId);
 				}
 				
 				bDeploymentSucceeded = IsValid(SpawnedMagicCircle)
@@ -326,7 +326,7 @@ void UMalogicGA_MagicCircleDeploy::OnTargetDataReadyCallback(const FGameplayAbil
 
 				if (UMagicWeaponStateComponent* WeaponStateComponent = Controller->FindComponentByClass<UMagicWeaponStateComponent>())
 				{
-					//Question：这里能够保证网络同步Actor和RPC同时或同一批次到达吗？
+					// The RPC and actor replication may arrive in either order. PredictionId-based consumption handles both cases.
 					WeaponStateComponent->ClientConfirmTargetData(LocalTargetDataHandle.UniqueId, bDeploymentSucceeded);
 				}
 			}

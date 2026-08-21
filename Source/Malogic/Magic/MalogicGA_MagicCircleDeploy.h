@@ -32,7 +32,7 @@ private:
 	const UMalogicMagicCircleDefinition* GetAssociatedDefinition(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo) const;
 	UMalogicMagicWeaponInstance* GetMagicWeaponInstance(const FGameplayAbilityActorInfo* ActorInfo) const;
 	bool ValidateDeploymentTargetData(const FGameplayAbilityTargetDataHandle& TargetData, FTransform& OutDeployTransform) const;
-	AMalogicMagicCircleInstance* SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo) const;
+	AMalogicMagicCircleInstance* SpawnMagicCircleInstance(const UMalogicMagicCircleDefinition* Definition, const FGameplayAbilityActorInfo* ActorInfo, const FTransform& DeployTransform, float ActualBuildingTime, FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo, uint16 PredictionId) const;
 
 	void StartDeploymentTargeting();
 	void OnTargetDataReadyCallback(const FGameplayAbilityTargetDataHandle& InData, FGameplayTag ApplicationTag);

@@ -82,10 +82,10 @@ void UMalogicEquipmentInstance::SpawnEquipmentActors(const TArray<FMalogicEquipm
 		{
 			AActor* ThirdPersonNewActor = GetWorld()->SpawnActorDeferred<AActor>(SpawnInfo.ActorToSpawn, FTransform::Identity, OwningPawn);
 			ThirdPersonNewActor->FinishSpawning(FTransform::Identity, true);
-			if (USkeletalMeshComponent* MeshComp = ThirdPersonNewActor->FindComponentByClass<USkeletalMeshComponent>())
+			/*if (USkeletalMeshComponent* MeshComp = ThirdPersonNewActor->FindComponentByClass<USkeletalMeshComponent>())
 			{
 				MeshComp->SetOwnerNoSee(false);
-			}
+			}*/
 			ThirdPersonNewActor->SetActorRelativeTransform(SpawnInfo.AttachTransform);
 			ThirdPersonNewActor->AttachToComponent(AttachTarget, FAttachmentTransformRules::KeepRelativeTransform, SpawnInfo.AttachSocket);
 
@@ -93,7 +93,7 @@ void UMalogicEquipmentInstance::SpawnEquipmentActors(const TArray<FMalogicEquipm
 			{
 				AActor* FirstPersonNewActor = GetWorld()->SpawnActorDeferred<AActor>(SpawnInfo.ActorToSpawn, FTransform::Identity, OwningPawn);
 				FirstPersonNewActor->FinishSpawning(FTransform::Identity, true);
-				if (USkeletalMeshComponent* MeshComp = FirstPersonNewActor->FindComponentByClass<USkeletalMeshComponent>())
+				/*if (USkeletalMeshComponent* MeshComp = FirstPersonNewActor->FindComponentByClass<USkeletalMeshComponent>())
 				{
 					MeshComp->SetOnlyOwnerSee(true);
 					if (AMalogicCharacter* Char = Cast<AMalogicCharacter>(OwningPawn))
@@ -101,6 +101,11 @@ void UMalogicEquipmentInstance::SpawnEquipmentActors(const TArray<FMalogicEquipm
 						if (!Char->IsFirstPersonViewEnabled()) MeshComp->SetVisibility(false);
 						AttachTargetFirstPerson = Char->GetFirstPersonMesh();
 					}
+				}*/
+				if (AMalogicCharacter* Char = Cast<AMalogicCharacter>(OwningPawn))
+				{
+					if (!Char->IsFirstPersonViewEnabled())  FirstPersonNewActor->SetActorHiddenInGame(true);
+					AttachTargetFirstPerson = Char->GetFirstPersonMesh();
 				}
 				FirstPersonNewActor->SetActorRelativeTransform(SpawnInfo.AttachTransform);
 				FirstPersonNewActor->AttachToComponent(AttachTargetFirstPerson, FAttachmentTransformRules::KeepRelativeTransform, SpawnInfo.AttachSocket);

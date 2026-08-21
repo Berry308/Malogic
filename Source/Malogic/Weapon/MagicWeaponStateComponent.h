@@ -41,12 +41,13 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	//服务器经过TargetData验证和生成MagicCircleInstance后，调用Client RPC通知客户端，销毁预测的MagicCircleViewActor
+	// Rejected deployments destroy the predicted view immediately. Successful views remain until the replicated instance consumes them.
 	UFUNCTION(Client, Reliable)
 	void ClientConfirmTargetData(uint16 UniqueId, bool bIsTargetDataValid);
 
 	uint16 AllocatePredictiveViewId();
 	void AddUnconfirmedPredictiveViewActor(const FGameplayAbilityTargetDataHandle& InTargetData, TSubclassOf<AMagicCircleViewActor> ViewActorClass, float PredictedBuildingTime);
+	bool ConsumePredictiveViewActor(uint16 UniqueId, float& OutBuildingProgress);
 
 	UFUNCTION(BlueprintPure, Category = "Magic Weapon")
 	int32 GetUnconfirmedPredictiveViewActorCount() const { return UnconfirmedPredictiveViewActors.Num(); }

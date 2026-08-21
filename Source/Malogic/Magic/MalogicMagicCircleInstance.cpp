@@ -7,17 +7,21 @@
 #include "Character/MalogicHealthComponent.h"
 #include "AbilitySystem/TargetData/MalogicGATargetData_MagicCircleSpawnInfo.h"
 #include "Engine/World.h"
+#include "GameFramework/Controller.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/Pawn.h"
 #include "Magic/MalogicMagicCircleDefinition.h"
 #include "MalogicGameplayTags.h"
 #include "MalogicLogChannels.h"
 #include "Net/UnrealNetwork.h"
+#include "Weapon/MagicWeaponStateComponent.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(MalogicMagicCircleInstance)
 
 AMalogicMagicCircleInstance::AMalogicMagicCircleInstance()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 	bReplicates = true;
 	SetReplicateMovement(false);//在可以动态移动的魔法阵中，此项需要设置为true
 
@@ -36,6 +40,7 @@ void AMalogicMagicCircleInstance::GetLifetimeReplicatedProps(TArray<FLifetimePro
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ThisClass, ActualBuildingTime);
+	DOREPLIFETIME_CONDITION(ThisClass, PredictionId, COND_OwnerOnly);
 	DOREPLIFETIME(ThisClass, MagicCircleState);
 	DOREPLIFETIME(ThisClass, MagicCircleDefinitionClass);
 	DOREPLIFETIME(ThisClass, DeploymentInstigator);
@@ -58,12 +63,13 @@ void AMalogicMagicCircleInstance::InitializeFromDefinition(const UMalogicMagicCi
 
 	MagicCircleDefinitionClass = Definition->GetClass();
 	DeploymentInstigator = InInstigator;
+	// The deploy ability supplies the server-authoritative building time here.
 	ActualBuildingTime = FMath::Max(0.0f, InActualBuildingTime);
 	BaseBuildingTime = Definition->BaseBuildingTime;
 	MagicCircleState = EMagicCircleState::Spawned;
 }
 
-void AMalogicMagicCircleInstance::InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo)
+void AMalogicMagicCircleInstance::InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo, uint16 InPredictionId)
 {
 	if (!HasAuthority())
 	{
@@ -71,7 +77,9 @@ void AMalogicMagicCircleInstance::InitializeFromTargetData(FMalogicGATargetData_
 		return;
 	}
 
-	ElapsedTime = 0.0f;
+	PredictionId = static_cast<int32>(InPredictionId);
+
+	float ElapsedTime = 0.0f;
 	const UWorld* World = GetWorld();
 	const AGameStateBase* GameState = World ? World->GetGameState() : nullptr;
 	if (!GameState || !FMath::IsFinite(SpawnInfo.ClientSpawnTime))
@@ -86,6 +94,7 @@ void AMalogicMagicCircleInstance::InitializeFromTargetData(FMalogicGATargetData_
 	}
 	//在此处计算从客户端发送到服务端的时间差，限制最大值为100ms
 	ElapsedTime = FMath::Clamp(ServerWorldTime - SpawnInfo.ClientSpawnTime, 0.0f, 0.1f);
+	ActualBuildingTime = FMath::Max(0.0f, ActualBuildingTime - ElapsedTime);
 }
 
 void AMalogicMagicCircleInstance::BeginPlay()
@@ -145,6 +154,26 @@ void AMalogicMagicCircleInstance::BeginPlay()
 	if (HasAuthority())
 	{
 		StartBuilding();
+	}
+
+	TryInitializeClientBuildingPresentation();
+}
+
+void AMalogicMagicCircleInstance::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	// After handoff, the client owns only this visual clock; gameplay state remains server-authoritative.
+	ClientPresentationElapsedTime += DeltaSeconds;
+	const float PresentationAlpha = ActualBuildingTime > KINDA_SMALL_NUMBER
+		? FMath::Clamp(ClientPresentationElapsedTime / ActualBuildingTime, 0.0f, 1.0f)
+		: 1.0f;
+	CurrentBuildingProgress = FMath::Lerp(ClientPresentationStartProgress, 1.0f, PresentationAlpha);
+	K2_ApplyBuildingProgress(CurrentBuildingProgress);
+
+	if (CurrentBuildingProgress >= 1.0f)
+	{
+		SetActorTickEnabled(false);
 	}
 }
 
@@ -255,6 +284,66 @@ void AMalogicMagicCircleInstance::HandleMagicCircleDestroyed()
 void AMalogicMagicCircleInstance::OnRep_MagicCircleState(EMagicCircleState OldState)
 {
 	OnMagicCircleStateChanged(OldState, MagicCircleState);
+	TryInitializeClientBuildingPresentation();
+}
+
+void AMalogicMagicCircleInstance::OnRep_ActualBuildingTime()
+{
+	TryInitializeClientBuildingPresentation();
+}
+
+void AMalogicMagicCircleInstance::OnRep_PredictionId()
+{
+	TryInitializeClientBuildingPresentation();
+}
+
+void AMalogicMagicCircleInstance::OnRep_Owner()
+{
+	Super::OnRep_Owner();
+	TryInitializeClientBuildingPresentation();
+}
+
+void AMalogicMagicCircleInstance::TryInitializeClientBuildingPresentation()
+{
+	if (!HasActorBegunPlay() || GetNetMode() == NM_DedicatedServer || bClientBuildingPresentationInitialized ||
+		MagicCircleState == EMagicCircleState::Spawned)
+	{
+		return;
+	}
+
+	float InitialProgress = 0.0f;
+	const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	if (OwnerPawn && OwnerPawn->IsLocallyControlled())
+	{
+		if (PredictionId == INDEX_NONE)
+		{
+			return;
+		}
+
+		AController* Controller = OwnerPawn->GetController();
+		UMagicWeaponStateComponent* WeaponStateComponent = Controller
+			? Controller->FindComponentByClass<UMagicWeaponStateComponent>()
+			: nullptr;
+		if (WeaponStateComponent)
+		{
+			// PredictionId pairs this replicated instance with the local predicted view actor.
+			WeaponStateComponent->ConsumePredictiveViewActor(static_cast<uint16>(PredictionId), InitialProgress);
+		}
+	}
+
+	StartClientBuildingPresentation(MagicCircleState == EMagicCircleState::Building ? InitialProgress : 1.0f);
+}
+
+void AMalogicMagicCircleInstance::StartClientBuildingPresentation(float InitialProgress)
+{
+	bClientBuildingPresentationInitialized = true;
+	ClientPresentationElapsedTime = 0.0f;
+	ClientPresentationStartProgress = ActualBuildingTime > KINDA_SMALL_NUMBER
+		? FMath::Clamp(InitialProgress, 0.0f, 1.0f)
+		: 1.0f;
+	CurrentBuildingProgress = ClientPresentationStartProgress;
+	K2_ApplyBuildingProgress(CurrentBuildingProgress);
+	SetActorTickEnabled(CurrentBuildingProgress < 1.0f && ActualBuildingTime > KINDA_SMALL_NUMBER);
 }
 
 void AMalogicMagicCircleInstance::SetMagicCircleState(EMagicCircleState NewState)
@@ -279,15 +368,14 @@ void AMalogicMagicCircleInstance::OnMagicCircleStateChanged(EMagicCircleState Ol
 		if (HasAuthority())
 		{
 			GetWorldTimerManager().ClearTimer(BuildingTimerHandle);
-			const float RemainingBuildingTime = FMath::Max(0.0f, ActualBuildingTime - ElapsedTime);
-			if (RemainingBuildingTime <= 0.0f)
+			if (ActualBuildingTime <= 0.0f)
 			{
 				GetWorldTimerManager().SetTimerForNextTick(this, &ThisClass::HandleBuildingFinished);
-				UE_LOG(LogMalogic, Warning, TEXT("Magic circle [%s] has no remaining building time. ActualBuildingTime [%f], ElapsedTime [%f]."), *GetNameSafe(this), ActualBuildingTime, ElapsedTime);
+				UE_LOG(LogMalogic, Warning, TEXT("Magic circle [%s] has no remaining building time. ActualBuildingTime [%f]."), *GetNameSafe(this), ActualBuildingTime);
 			}
 			else
 			{
-				GetWorldTimerManager().SetTimer(BuildingTimerHandle, this, &ThisClass::HandleBuildingFinished, RemainingBuildingTime, false);
+				GetWorldTimerManager().SetTimer(BuildingTimerHandle, this, &ThisClass::HandleBuildingFinished, ActualBuildingTime, false);
 			}
 		}
 		break;

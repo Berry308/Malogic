@@ -781,6 +781,7 @@ OnEquipped()
 
 OnUnEquipped()
 
+
 # MagicCircleViewActor
 基类：AActor（建议类名为 `AMagicCircleViewActor`）
 职责：
@@ -1057,7 +1058,7 @@ HealthSet、CombatSet
 float MaxShootDistance //光束最大射击距离，当前为 Definition CDO 中的静态配置
 float BeamRadius //光束扫描半径，当前为 Definition CDO 中的静态配置
 
-当前不创建 `MagicCircle_LightBeam` C++ 实例子类。`MalogicGA_LightBeamShoot` 从本次 AbilitySpec 的 SourceObject 获取 `MCD_LightBeam` Definition CDO，并直接读取 `MaxShootDistance` 和 `BeamRadius`；实例只负责通用生命周期、ASC 和 AbilitySet。
+当前不创建 `MagicCircleInstance_LightBeam` C++ 实例子类。`MalogicGA_LightBeamShoot` 从本次 AbilitySpec 的 SourceObject 获取 `MCD_LightBeam` Definition CDO，并直接读取 `MaxShootDistance` 和 `BeamRadius`；实例只负责通用生命周期、ASC 和 AbilitySet。
 
 # MalogicGA_FromMagicCircle
 ## 概述

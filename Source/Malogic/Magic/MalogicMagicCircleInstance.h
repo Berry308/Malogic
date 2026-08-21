@@ -49,9 +49,10 @@ class MALOGIC_API AMalogicMagicCircleInstance : public AActor
 
 public:
 	AMalogicMagicCircleInstance();
+	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void InitializeFromDefinition(const UMalogicMagicCircleDefinition* Definition, AActor* InInstigator, float InActualBuildingTime);
-	virtual void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo);
+	virtual void InitializeFromTargetData(FMalogicGATargetData_MagicCircleSpawnInfo& SpawnInfo, uint16 InPredictionId);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "Magic Circle")
 	void ActivateMagic(const FGameplayTag& ActivationTag);
@@ -62,12 +63,16 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Magic Circle")
 	AActor* GetDeploymentInstigator() const { return DeploymentInstigator; }
 
+	UFUNCTION(BlueprintPure, Category = "Magic Circle")
+	float GetCurrentBuildingProgress() const { return CurrentBuildingProgress; }
+
 	UMalogicAbilitySystemComponent* GetAbilitySystemComponent() const { return AbilitySystemComponent; }
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void OnRep_Owner() override;
 
 	void InitializeLifetime();
 	void StartBuilding();
@@ -91,8 +96,17 @@ protected:
 
 	UFUNCTION()
 	void OnRep_MagicCircleState(EMagicCircleState OldState);
+	UFUNCTION()
+	void OnRep_ActualBuildingTime();
+	UFUNCTION()
+	void OnRep_PredictionId();
 
 	void OnMagicCircleStateChanged(EMagicCircleState OldState, EMagicCircleState NewState);
+	void TryInitializeClientBuildingPresentation();
+	void StartClientBuildingPresentation(float InitialProgress);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "Magic Circle", DisplayName = "Apply Building Progress")
+	void K2_ApplyBuildingProgress(float NormalizedProgress);
 
 	void SetMagicCircleState(EMagicCircleState NewState);
 	bool ActivateAbilitiesByTag(const FGameplayTag& ActivationTag);
@@ -111,8 +125,11 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
 	EMagicCircleActivateStrategy ActivateStrategy = EMagicCircleActivateStrategy::Auto;
 
-	UPROPERTY(Replicated)
+	UPROPERTY(ReplicatedUsing = OnRep_ActualBuildingTime)
 	float ActualBuildingTime = 0.0f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_PredictionId)
+	int32 PredictionId = INDEX_NONE;
 
 	//提供给魔法阵进行动画播放速度计算。
 	UPROPERTY(BlueprintReadOnly)
@@ -152,7 +169,13 @@ private:
 
 	FTimerHandle BuildingTimerHandle;
 	FTimerHandle LifeTimeTimerHandle;
-	float ElapsedTime = 0.0f;
+	float ClientPresentationElapsedTime = 0.0f;
+	float ClientPresentationStartProgress = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Magic Circle", meta = (AllowPrivateAccess = "true"))
+	float CurrentBuildingProgress = 0.0f;
+
 	bool bLifeTimeExpired = false;
 	bool bAbilitySetGranted = false;
+	bool bClientBuildingPresentationInitialized = false;
 };

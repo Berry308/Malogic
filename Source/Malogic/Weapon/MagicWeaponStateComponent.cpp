@@ -31,10 +31,11 @@ void UMagicWeaponStateComponent::EndPlay(const EEndPlayReason::Type EndPlayReaso
 
 void UMagicWeaponStateComponent::ClientConfirmTargetData_Implementation(uint16 UniqueId, bool bIsTargetDataValid)
 {
-	(void)bIsTargetDataValid;
-	//获取当前服务器的时间，计算RTT并尝试修改代理Actor的动画播放进度。
-
-	DestroyUnconfirmedPredictiveViewActor(UniqueId);
+	if (!bIsTargetDataValid)
+	{
+		DestroyUnconfirmedPredictiveViewActor(UniqueId);
+	}
+	// On success the replicated instance consumes the view. This is safe whether the RPC or actor arrives first.
 }
 
 uint16 UMagicWeaponStateComponent::AllocatePredictiveViewId()
@@ -116,6 +117,32 @@ void UMagicWeaponStateComponent::AddUnconfirmedPredictiveViewActor(const FGamepl
 	FPredictiveMagicCircleViewActor& NewEntry = UnconfirmedPredictiveViewActors.Emplace_GetRef(UniqueId);
 	NewEntry.ViewActor = NewViewActor;
 	NewEntry.SpawnServerTime = World->GetGameState()->GetServerWorldTimeSeconds();
+}
+
+bool UMagicWeaponStateComponent::ConsumePredictiveViewActor(uint16 UniqueId, float& OutBuildingProgress)
+{
+	OutBuildingProgress = 0.0f;
+
+	for (int32 EntryIndex = 0; EntryIndex < UnconfirmedPredictiveViewActors.Num(); ++EntryIndex)
+	{
+		FPredictiveMagicCircleViewActor& Entry = UnconfirmedPredictiveViewActors[EntryIndex];
+		if (Entry.UniqueId != UniqueId)
+		{
+			continue;
+		}
+
+		if (AMagicCircleViewActor* ViewActor = Entry.ViewActor.Get())
+		{
+			// Consume atomically: read the handoff point, destroy the prediction, and remove its ID.
+			OutBuildingProgress = ViewActor->GetCurrentBuildingProgress();
+			ViewActor->Destroy();
+		}
+
+		UnconfirmedPredictiveViewActors.RemoveAtSwap(EntryIndex);
+		return true;
+	}
+
+	return false;
 }
 
 void UMagicWeaponStateComponent::DestroyUnconfirmedPredictiveViewActor(uint16 UniqueId)
