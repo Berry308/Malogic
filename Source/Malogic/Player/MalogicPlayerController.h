@@ -11,6 +11,8 @@ class APawn;
 class APlayerState;
 class UMalogicAbilitySystemComponent;
 class UPlayer;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FMalogicPlayerStateChangedEvent);
 //class UUserWidget;
 
 /**
@@ -29,6 +31,10 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Malogic|PlayerController")
 	UMalogicAbilitySystemComponent* GetMalogicAbilitySystemComponent() const;
+
+	/** Notification for Lua/C++ systems that mirror the current PlayerState. */
+	UPROPERTY(BlueprintAssignable, Category = "Malogic|PlayerController")
+	FMalogicPlayerStateChangedEvent OnMalogicPlayerStateChanged;
 
 	// UI input helpers are kept for later use, but intentionally disabled for now.
 	//UFUNCTION(BlueprintCallable, Category = "Malogic|PlayerController")

@@ -21,7 +21,8 @@ public class Malogic : ModuleRules
 			"ModularGameplay",
 			"ModularGameplayActors",
 			"NetCore",
-            "EnhancedInput" 
+			"EnhancedInput",
+			"ModelViewViewModel"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });

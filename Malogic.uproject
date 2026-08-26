@@ -37,6 +37,10 @@
 		{
 			"Name": "UnLua",
 			"Enabled": true
+		},
+		{
+			"Name": "ModelViewViewModel",
+			"Enabled": true
 		}
 	]
 }

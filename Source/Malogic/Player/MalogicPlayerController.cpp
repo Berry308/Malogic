@@ -81,6 +81,7 @@ void AMalogicPlayerController::BroadcastOnPlayerStateChanged()
 	OnPlayerStateChanged();
 
 	LastSeenPlayerState = PlayerState;
+	OnMalogicPlayerStateChanged.Broadcast();
 }
 
 void AMalogicPlayerController::InitPlayerState()
