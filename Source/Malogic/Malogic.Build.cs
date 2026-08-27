@@ -22,10 +22,11 @@ public class Malogic : ModuleRules
 			"ModularGameplayActors",
 			"NetCore",
 			"EnhancedInput",
-			"ModelViewViewModel"
+			"ModelViewViewModel",
+			"UMG"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] {  });
+		PrivateDependencyModuleNames.AddRange(new string[] { "SlateCore" });
 
 		PublicIncludePaths.AddRange(new string[] { 
 			"Malogic"

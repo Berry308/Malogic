@@ -11,12 +11,14 @@
 #include "MalogicLogChannels.h"
 #include "Player/MalogicPlayerSpawningManagerComponent.h"
 #include "Player/MalogicPlayerState.h"
+#include "UI/MalogicHUD.h"
 #include "TimerManager.h"
 
 AMalogicGameMode::AMalogicGameMode(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	GameStateClass = AMalogicGameState::StaticClass();
+	HUDClass = AMalogicHUD::StaticClass();
 }
 
 void AMalogicGameMode::PostLogin(APlayerController* NewPlayer)

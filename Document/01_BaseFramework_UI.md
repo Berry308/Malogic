@@ -157,13 +157,55 @@ C++ Manager::Deinitialize
     -> C++ 清空 Registry
 ```
 
-## Widget 约定
+## Widget 管理框架
+
+### MazeRunner 的框架思路
+
+MazeRunner 采用以玩家 HUD 为入口的轻量 Widget 管理方案：
+
+```text
+MaruUISubsystem（全局入口）
+    -> MaruHUD（单个玩家）
+    -> PrimaryGameLayout（主布局）
+    -> ActivatableWidgetStack（分层 Widget 栈）
+    -> ActivatableWidget（具体界面）
+```
+
+- `MaruHUD` 在 `BeginPlay` 中根据可配置的 `PrimaryGameLayoutClass` 创建主布局，并将其加入 Viewport。
+- `PrimaryGameLayout` 通过 `EWidgetLayer` 维护 `HUD`、`InteractableUI`、`TopUI` 三个 Widget 栈。
+- `ActivatableWidgetStack` 基于 `UOverlay` 实现 Push/Pop。新 Widget 入栈时隐藏旧栈顶，出栈时移除当前 Widget 并恢复上一个 Widget。
+- `ActivatableWidget` 保存自身的输入模式、鼠标锁定和鼠标显示配置。
+- `PrimaryGameLayout` 根据当前栈顶 Widget 的配置统一切换 `GameOnly`、`GameAndUI` 或 `UIOnly` 输入模式，并设置鼠标状态。
+- `MaruUISubsystem` 提供跨玩家分发入口，通过各玩家的 HUD 将 Widget 送入指定层级。
+
+### 可迁移的设计原则
+
+- 每个本地玩家拥有自己的 HUD、主布局和 Widget 栈，UI 状态不直接挂在全局对象上。
+- 用主布局统一管理层级和输入路由，业务代码只指定目标层级并执行 Push/Pop。
+- 常驻 HUD、可交互窗口和临时提示使用不同层级，避免临时提示改变主要窗口的输入状态。
+- Widget 的输入需求由 Widget 自身配置，布局负责根据栈顶状态统一应用到 PlayerController。
+- 主布局和栈持有 Widget 的 UObject 引用，避免 Widget 仅由临时 Lua 或业务变量引用而被提前回收。
+
+### 迁移时需要重新评估的部分
+
+- MazeRunner 使用自定义 `UUserWidget`、Widget 栈和 `AHUD`，没有依赖 CommonUI 的 Activatable Widget 生命周期；Malogic 是否引入 CommonUI 或继续采用轻量实现，需要在后续 Widget 阶段决定。
+- MazeRunner 的 `TopUI` 栈不参与输入模式选择。若提示界面需要接收焦点或输入，应重新定义其输入优先级和关闭策略。
+- `MaruUISubsystem::DeliverWidgetToAllPlayer` 分发时复用同一个 Widget 实例；迁移时应确认每个 PlayerController 是否需要独立创建 Widget，避免同一个 Widget 被重复挂载。
+- Push/Pop 和输入模式切换需要补充空指针、重复入栈、非法出栈以及 PlayerController 尚未初始化等边界处理。
+
+### 当前 Malogic 约定
 
 Widget 只声明并绑定所需 ViewModel：
 
 - 不在 Widget Construct 中创建长期 ViewModel；
 - 不直接查找或监听 Gameplay Component；
 - 不承担 Service 生命周期；
-- 由后续 Widget 管理框架或外部 Lua 逻辑将 ViewModel 注入 Widget。
+- 由外部 Lua 逻辑或后续 Widget 管理框架将 ViewModel 注入 Widget。
 
-Widget 创建、层级、激活、输入管理和复用策略暂不属于本阶段范围。
+Widget 的具体创建入口、层级命名、激活/关闭接口、输入管理和复用策略仍待后续确定。本节记录 MazeRunner 的参考结构，不表示现有实现应无修改地迁移。
+
+## Lua 在 UI 框架中的使用
+
+MazeRunner 已启用 UnLua 和 MVVM 插件，但当前 UI 核心代码主要由 `MaruUISubsystem`、`MaruHUD`、`PrimaryGameLayout` 和 Widget 栈组成，未形成独立的 UI Lua Service 实现。因此，Lua Service 是 Malogic 在迁移 MVVM 方案时的架构扩展，不是 MazeRunner UI 代码的直接复制。
+
+在 Malogic 中，C++ Manager 负责 Subsystem 作用域、Service Registry 和 UObject 生命周期；Lua Manager/Service 负责业务编排、Model 事件响应、数据转换和 ViewModel 更新。Widget 只接收并绑定 ViewModel，不直接从 Lua 查找游戏数据。
