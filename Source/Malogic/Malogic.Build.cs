@@ -22,6 +22,7 @@ public class Malogic : ModuleRules
 			"ModularGameplayActors",
 			"NetCore",
 			"EnhancedInput",
+			"FieldNotification",
 			"ModelViewViewModel",
 			"UMG"
 		});

@@ -1,4 +1,4 @@
-# UI 基础框架
+# 使用Lua构建MVVM框架下ViewModel的管理与更新
 
 ## 设计目标
 
@@ -157,15 +157,14 @@ C++ Manager::Deinitialize
     -> C++ 清空 Registry
 ```
 
-## Widget 管理框架
+# Widget 管理框架
 
-### MazeRunner 的框架思路
+## MazeRunner 参考
 
 MazeRunner 采用以玩家 HUD 为入口的轻量 Widget 管理方案：
 
 ```text
-MaruUISubsystem（全局入口）
-    -> MaruHUD（单个玩家）
+MaruHUD（单个玩家）
     -> PrimaryGameLayout（主布局）
     -> ActivatableWidgetStack（分层 Widget 栈）
     -> ActivatableWidget（具体界面）
@@ -176,36 +175,73 @@ MaruUISubsystem（全局入口）
 - `ActivatableWidgetStack` 基于 `UOverlay` 实现 Push/Pop。新 Widget 入栈时隐藏旧栈顶，出栈时移除当前 Widget 并恢复上一个 Widget。
 - `ActivatableWidget` 保存自身的输入模式、鼠标锁定和鼠标显示配置。
 - `PrimaryGameLayout` 根据当前栈顶 Widget 的配置统一切换 `GameOnly`、`GameAndUI` 或 `UIOnly` 输入模式，并设置鼠标状态。
-- `MaruUISubsystem` 提供跨玩家分发入口，通过各玩家的 HUD 将 Widget 送入指定层级。
 
-### 可迁移的设计原则
+## Malogic UI Manager
+
+`UMalogicUIManager` 继承 `ULocalPlayerSubsystem`，是单个本地玩家的客户端 UI 管理入口。
+
+```text
+本地 LocalPlayer
+    -> UMalogicUIManager
+    -> AMalogicHUD / UPrimaryGameLayout
+    -> HUD 根 ActivatableWidget
+    -> EquipmentQuickBar 等 HUD 子 Widget
+```
+
+`UMalogicUIManager` 负责：
+
+- 等待本地 `PlayerController`、`AMalogicHUD` 和 `UPrimaryGameLayout` 就绪。
+- 创建、添加和移除本地玩家的 Widget。
+- 在 Widget 加入布局前注入所需 ViewModel。
+- 响应本地 UI 请求与复制状态变化，协调常驻 HUD、窗口和提示 UI。
+
+`UVMLocalPlayerManager` 只负责 ViewModel Service、数据绑定和 ViewModel 生命周期；`UMalogicUIManager` 只负责 Widget 生命周期和布局。两者通过已注册的 ViewModel 协作，不互相持有业务数据。
+
+## Widget 容器
+
+`UPrimaryGameLayout` 按用途划分容器：
+
+| 容器 | 规则 | 示例 |
+| --- | --- | --- |
+| HUD Layer | 通常只保留一个 HUD 根 `ActivatableWidget` | 状态栏、`EquipmentQuickBar`、准星、任务追踪 |
+| Interactable UI Stack | 仅显示栈顶，用于需要焦点的窗口 | 背包、设置、商店、暂停菜单 |
+| Top UI Layer | 不改变主输入状态的临时覆盖 UI | Toast、提示、飘字 |
+
+`EquipmentQuickBar` 是 HUD 根 Widget 的子 Widget，不单独进入 `HUDLayerStack`。这样常驻 HUD 内的多个模块可同时显示，而不会因 Stack 的 Push 行为相互隐藏。
+
+## 创建与绑定时机
+
+常驻 HUD 在以下条件都满足后，由 `UMalogicUIManager` 为每个本地玩家创建一次：
+
+1. 本地 `PlayerController` 已创建。
+2. `AMalogicHUD` 已创建 `UPrimaryGameLayout`。
+3. 对应 ViewModel Service 已注册，或能够提供目标 ViewModel。
+
+创建顺序为：
+
+```text
+获取 ViewModel
+    -> CreateWidget（以本地 PlayerController 为 Owning Player）
+    -> 注入 Manual ViewModel
+    -> Push 到指定容器
+```
+
+Widget 不直接读取 `UMalogicQuickBarComponent` 等 Gameplay Component。以 `EquipmentQuickBar` 为例，后续应由本地玩家作用域的快捷栏 ViewModel Service 监听槽位和当前选中槽位变化，并更新快捷栏 ViewModel；Widget 仅绑定该 ViewModel。Controller 更换、重生或 Pawn 更换时，Service 重新绑定数据源，常驻 HUD 不需要重建。
+
+## 网络边界
+
+服务器不创建、不持有、也不向远端客户端分发 Widget。服务器通过复制权威游戏状态或发送 Client RPC 表达游戏事件；每个客户端的 `UMalogicUIManager` 监听本地可见状态后，各自创建、更新或关闭 UI。
+
+例如，快捷栏数据通过所属玩家的复制状态更新，Boss 战通过 `GameState` 状态同步，物品获得提示通过 Owner-only 数据或 Client RPC 触发。Widget 实例只能附加到其所属本地玩家的布局，不能在多个 PlayerController 间复用。
+
+## 设计原则
 
 - 每个本地玩家拥有自己的 HUD、主布局和 Widget 栈，UI 状态不直接挂在全局对象上。
 - 用主布局统一管理层级和输入路由，业务代码只指定目标层级并执行 Push/Pop。
-- 常驻 HUD、可交互窗口和临时提示使用不同层级，避免临时提示改变主要窗口的输入状态。
+- 常驻 HUD、可交互窗口和临时提示使用不同容器，避免临时提示改变主要窗口的输入状态。
 - Widget 的输入需求由 Widget 自身配置，布局负责根据栈顶状态统一应用到 PlayerController。
 - 主布局和栈持有 Widget 的 UObject 引用，避免 Widget 仅由临时 Lua 或业务变量引用而被提前回收。
 
-### 迁移时需要重新评估的部分
-
-- MazeRunner 使用自定义 `UUserWidget`、Widget 栈和 `AHUD`，没有依赖 CommonUI 的 Activatable Widget 生命周期；Malogic 是否引入 CommonUI 或继续采用轻量实现，需要在后续 Widget 阶段决定。
-- MazeRunner 的 `TopUI` 栈不参与输入模式选择。若提示界面需要接收焦点或输入，应重新定义其输入优先级和关闭策略。
-- `MaruUISubsystem::DeliverWidgetToAllPlayer` 分发时复用同一个 Widget 实例；迁移时应确认每个 PlayerController 是否需要独立创建 Widget，避免同一个 Widget 被重复挂载。
-- Push/Pop 和输入模式切换需要补充空指针、重复入栈、非法出栈以及 PlayerController 尚未初始化等边界处理。
-
-### 当前 Malogic 约定
-
-Widget 只声明并绑定所需 ViewModel：
-
-- 不在 Widget Construct 中创建长期 ViewModel；
-- 不直接查找或监听 Gameplay Component；
-- 不承担 Service 生命周期；
-- 由外部 Lua 逻辑或后续 Widget 管理框架将 ViewModel 注入 Widget。
-
-Widget 的具体创建入口、层级命名、激活/关闭接口、输入管理和复用策略仍待后续确定。本节记录 MazeRunner 的参考结构，不表示现有实现应无修改地迁移。
-
-## Lua 在 UI 框架中的使用
-
-MazeRunner 已启用 UnLua 和 MVVM 插件，但当前 UI 核心代码主要由 `MaruUISubsystem`、`MaruHUD`、`PrimaryGameLayout` 和 Widget 栈组成，未形成独立的 UI Lua Service 实现。因此，Lua Service 是 Malogic 在迁移 MVVM 方案时的架构扩展，不是 MazeRunner UI 代码的直接复制。
+# Lua 在 UI 框架中的使用
 
 在 Malogic 中，C++ Manager 负责 Subsystem 作用域、Service Registry 和 UObject 生命周期；Lua Manager/Service 负责业务编排、Model 事件响应、数据转换和 ViewModel 更新。Widget 只接收并绑定 ViewModel，不直接从 Lua 查找游戏数据。
