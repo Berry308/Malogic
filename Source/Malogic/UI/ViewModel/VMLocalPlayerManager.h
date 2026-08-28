@@ -11,6 +11,8 @@
 
 class APlayerController;
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnLocalPlayerViewModelServiceRegistered, FName, UViewModelService*);
+
 /** Local-player lifetime container for player-scoped ViewModel services. */
 UCLASS()
 class MALOGIC_API UVMLocalPlayerManager : public ULocalPlayerSubsystem, public IUnLuaInterface
@@ -39,6 +41,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Malogic|ViewModel")
 	bool UnregisterService(FName ServiceName);
 
+	FOnLocalPlayerViewModelServiceRegistered& OnServiceRegistered() { return ServiceRegistered; }
+
 protected:
 	/** Implemented by Lua to create and register services for the local-player scope. */
 	UFUNCTION(BlueprintImplementableEvent)
@@ -57,4 +61,6 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FName, TObjectPtr<UViewModelService>> Services;
+
+	FOnLocalPlayerViewModelServiceRegistered ServiceRegistered;
 };

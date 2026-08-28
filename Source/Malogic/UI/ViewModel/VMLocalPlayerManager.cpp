@@ -73,6 +73,7 @@ bool UVMLocalPlayerManager::RegisterService(FName ServiceName, UViewModelService
 
 	Services.Add(ServiceName, Service);
 	Service->InitializeService();
+	ServiceRegistered.Broadcast(ServiceName, Service);
 	return true;
 }
 

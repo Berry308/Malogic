@@ -4,15 +4,12 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Engine/LocalPlayer.h"
-#include "Engine/World.h"
 #include "FieldNotification/IFieldValueChanged.h"
 #include "GameFramework/PlayerController.h"
 #include "MalogicLogChannels.h"
 #include "MVVMSubsystem.h"
 #include "MVVMViewModelBase.h"
-#include "TimerManager.h"
 #include "UI/ActivatableWidget.h"
-#include "UI/MalogicHUD.h"
 #include "UI/ViewModel/VMLocalPlayerManager.h"
 #include "UI/ViewModel/ViewModelService.h"
 #include "View/MVVMView.h"
@@ -21,21 +18,32 @@
 
 void UMalogicUIManager::Initialize(FSubsystemCollectionBase& Collection)
 {
+	Collection.InitializeDependency<UVMLocalPlayerManager>();
 	Super::Initialize(Collection);
-	StartWaitingForPrerequisites();
+
+	if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
+	{
+		if (UVMLocalPlayerManager* ViewModelManager = LocalPlayer->GetSubsystem<UVMLocalPlayerManager>())
+		{
+			ServiceRegisteredHandle = ViewModelManager->OnServiceRegistered().AddUObject(this, &ThisClass::HandleViewModelServiceRegistered);
+		}
+	}
+
+	RegisterHUD(GetCurrentHUD());
 }
 
 void UMalogicUIManager::Deinitialize()
 {
-	StopWaitingForPrerequisites();
+	UnbindFromHUD();
 
-	for (const TPair<FName, TObjectPtr<UActivatableWidget>>& WidgetEntry : ManagedWidgets)
+	if (ULocalPlayer* LocalPlayer = GetLocalPlayer())
 	{
-		if (UActivatableWidget* Widget = WidgetEntry.Value.Get())
+		if (UVMLocalPlayerManager* ViewModelManager = LocalPlayer->GetSubsystem<UVMLocalPlayerManager>())
 		{
-			Widget->RemoveFromParent();
+			ViewModelManager->OnServiceRegistered().Remove(ServiceRegisteredHandle);
 		}
 	}
+	ServiceRegisteredHandle.Reset();
 	ManagedWidgets.Reset();
 
 	Super::Deinitialize();
@@ -44,30 +52,46 @@ void UMalogicUIManager::Deinitialize()
 void UMalogicUIManager::PlayerControllerChanged(APlayerController* NewPlayerController)
 {
 	Super::PlayerControllerChanged(NewPlayerController);
-	StartWaitingForPrerequisites();
+	RegisterHUD(NewPlayerController ? Cast<AMalogicHUD>(NewPlayerController->GetHUD()) : nullptr);
 }
 
-bool UMalogicUIManager::ShowConfiguredWidget(FName WidgetName)
+void UMalogicUIManager::RegisterHUD(AMalogicHUD* HUD)
 {
-	const FMalogicUIWidgetConfig* WidgetConfig = PersistentWidgetConfigs.FindByPredicate(
-		[WidgetName](const FMalogicUIWidgetConfig& Candidate)
+	if (BoundHUD.IsValid() && BoundHUD.Get() == HUD)
+	{
+		return;
+	}
+
+	UnbindFromHUD();
+	ManagedWidgets.Reset();
+
+	if (!HUD || HUD != GetCurrentHUD())
+	{
+		return;
+	}
+
+	BindToHUD(HUD);
+}
+
+bool UMalogicUIManager::ShowDefaultWidget(FName WidgetName)
+{
+	AMalogicHUD* HUD = BoundHUD.Get();
+	if (!HUD || !HUD->IsHUDReady())
+	{
+		return false;
+	}
+
+	const FMalogicHUDWidgetConfig* WidgetConfig = HUD->GetDefaultWidgetConfigs().FindByPredicate(
+		[WidgetName](const FMalogicHUDWidgetConfig& Candidate)
 		{
 			return Candidate.WidgetName == WidgetName;
 		});
-
-	const bool bWidgetCreated = WidgetConfig && TryCreateConfiguredWidget(*WidgetConfig);
-	if (!bWidgetCreated)
-	{
-		StartWaitingForPrerequisites();
-	}
-	return bWidgetCreated;
+	return WidgetConfig && TryCreateDefaultWidget(*WidgetConfig);
 }
 
 bool UMalogicUIManager::PopWidgetFromLayer(EWidgetLayer WidgetLayer)
 {
-	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
-	APlayerController* PlayerController = LocalPlayer ? LocalPlayer->GetPlayerController(GetWorld()) : nullptr;
-	AMalogicHUD* HUD = PlayerController ? Cast<AMalogicHUD>(PlayerController->GetHUD()) : nullptr;
+	AMalogicHUD* HUD = BoundHUD.Get();
 	return HUD && HUD->RemoveTopWidgetFrom(WidgetLayer);
 }
 
@@ -77,7 +101,67 @@ UActivatableWidget* UMalogicUIManager::FindManagedWidget(FName WidgetName) const
 	return FoundWidget && IsValid(FoundWidget->Get()) ? FoundWidget->Get() : nullptr;
 }
 
-bool UMalogicUIManager::TryCreateConfiguredWidget(const FMalogicUIWidgetConfig& WidgetConfig)
+void UMalogicUIManager::HandleHUDReady(AMalogicHUD* ReadyHUD)
+{
+	if (ReadyHUD && ReadyHUD == BoundHUD.Get())
+	{
+		TryCreateDefaultWidgets();
+	}
+}
+
+void UMalogicUIManager::HandleViewModelServiceRegistered(FName /*ServiceName*/, UViewModelService* /*Service*/)
+{
+	if (BoundHUD.IsValid() && BoundHUD->IsHUDReady())
+	{
+		TryCreateDefaultWidgets();
+	}
+}
+
+void UMalogicUIManager::BindToHUD(AMalogicHUD* HUD)
+{
+	if (BoundHUD.Get() == HUD)
+	{
+		return;
+	}
+
+	UnbindFromHUD();
+	if (!HUD)
+	{
+		return;
+	}
+
+	BoundHUD = HUD;
+	HUD->OnHUDReady.AddDynamic(this, &ThisClass::HandleHUDReady);
+	if (HUD->IsHUDReady())
+	{
+		HandleHUDReady(HUD);
+	}
+}
+
+void UMalogicUIManager::UnbindFromHUD()
+{
+	if (BoundHUD.IsValid())
+	{
+		BoundHUD->OnHUDReady.RemoveDynamic(this, &ThisClass::HandleHUDReady);
+	}
+	BoundHUD.Reset();
+}
+
+void UMalogicUIManager::TryCreateDefaultWidgets()
+{
+	AMalogicHUD* HUD = BoundHUD.Get();
+	if (!HUD || !HUD->IsHUDReady())
+	{
+		return;
+	}
+
+	for (const FMalogicHUDWidgetConfig& WidgetConfig : HUD->GetDefaultWidgetConfigs())
+	{
+		TryCreateDefaultWidget(WidgetConfig);
+	}
+}
+
+bool UMalogicUIManager::TryCreateDefaultWidget(const FMalogicHUDWidgetConfig& WidgetConfig)
 {
 	if (!IsWidgetConfigValid(WidgetConfig))
 	{
@@ -89,48 +173,49 @@ bool UMalogicUIManager::TryCreateConfiguredWidget(const FMalogicUIWidgetConfig& 
 		return true;
 	}
 
-	ULocalPlayer* LocalPlayer = GetLocalPlayer();
-	APlayerController* PlayerController = LocalPlayer ? LocalPlayer->GetPlayerController(GetWorld()) : nullptr;
-	AMalogicHUD* HUD = PlayerController ? Cast<AMalogicHUD>(PlayerController->GetHUD()) : nullptr;
-	if (!PlayerController || !HUD || !HUD->GetPrimaryGameLayout())
+	AMalogicHUD* HUD = BoundHUD.Get();
+	APlayerController* PlayerController = HUD ? HUD->GetOwningPlayerController() : nullptr;
+	if (!HUD || !HUD->IsHUDReady() || !PlayerController)
 	{
 		return false;
 	}
 
 	UActivatableWidget* Widget = CreateWidget<UActivatableWidget>(PlayerController, WidgetConfig.WidgetClass);
-	if (!Widget || !InjectViewModel(Widget, WidgetConfig))
-	{
-		return false;
-	}
+	if (!Widget || !InjectViewModel(Widget, WidgetConfig)) return false;
 
-	if (!HUD->AddWidgetToLayer(WidgetConfig.WidgetLayer, Widget))
-	{
-		return false;
-	}
+	if (!HUD->AddWidgetToLayer(WidgetConfig.WidgetLayer, Widget)) return false;
 
 	ManagedWidgets.Add(WidgetConfig.WidgetName, Widget);
 	return true;
 }
 
-bool UMalogicUIManager::IsWidgetConfigValid(const FMalogicUIWidgetConfig& WidgetConfig)
+bool UMalogicUIManager::IsWidgetConfigValid(const FMalogicHUDWidgetConfig& WidgetConfig)
 {
-	const bool bIsValid = !WidgetConfig.WidgetName.IsNone()
-		&& WidgetConfig.WidgetClass
-		&& !WidgetConfig.ViewModelServiceName.IsNone()
+	const bool bHasAnyViewModelField = !WidgetConfig.ViewModelServiceName.IsNone()
+		|| !WidgetConfig.ViewModelName.IsNone()
+		|| !WidgetConfig.ManualViewModelName.IsNone();
+	const bool bHasCompleteViewModelConfig = !WidgetConfig.ViewModelServiceName.IsNone()
 		&& !WidgetConfig.ViewModelName.IsNone()
 		&& !WidgetConfig.ManualViewModelName.IsNone();
-	if (bIsValid || LoggedInvalidWidgetConfigs.Contains(WidgetConfig.WidgetName))
+	const bool bIsValid = !WidgetConfig.WidgetName.IsNone()
+		&& WidgetConfig.WidgetClass
+		&& (!bHasAnyViewModelField || bHasCompleteViewModelConfig);
+	if (!bIsValid)
 	{
-		return bIsValid;
+		UE_LOG(LogUI, Error, TEXT("HUD widget config [%s] requires WidgetName and WidgetClass. ViewModel fields must be either all set or all empty."), *WidgetConfig.WidgetName.ToString());
+		return false;
 	}
 
-	LoggedInvalidWidgetConfigs.Add(WidgetConfig.WidgetName);
-	UE_LOG(LogUI, Warning, TEXT("UI widget config [%s] requires WidgetClass, ViewModelServiceName, ViewModelName, and ManualViewModelName."), *WidgetConfig.WidgetName.ToString());
-	return false;
+	return true;
 }
 
-bool UMalogicUIManager::InjectViewModel(UActivatableWidget* Widget, const FMalogicUIWidgetConfig& WidgetConfig) const
+bool UMalogicUIManager::InjectViewModel(UActivatableWidget* Widget, const FMalogicHUDWidgetConfig& WidgetConfig) const
 {
+	if (WidgetConfig.ViewModelServiceName.IsNone())
+	{
+		return true;
+	}
+
 	UViewModelService* Service = FindViewModelService(WidgetConfig.ViewModelServiceName);
 	UMVVMViewModelBase* ViewModel = Service ? Service->FindViewModel(WidgetConfig.ViewModelName) : nullptr;
 	UMVVMView* View = UMVVMSubsystem::GetViewFromUserWidget(Widget);
@@ -139,8 +224,6 @@ bool UMalogicUIManager::InjectViewModel(UActivatableWidget* Widget, const FMalog
 		return false;
 	}
 
-	//MVVM 插件并不关心你的 ViewModel 到底是什么类，它唯一关心的能力是：“当你属性改变时，你能通知我”。
-	//这个能力是由 INotifyFieldValueChanged 接口定义的。通过使用接口，任何 UObject（即便它不继承自 UMVVMViewModelBase）只要实现了该接口，就能作为数据源注入。
 	TScriptInterface<INotifyFieldValueChanged> ViewModelInterface;
 	ViewModelInterface.SetObject(ViewModel);
 	ViewModelInterface.SetInterface(Cast<INotifyFieldValueChanged>(ViewModel));
@@ -154,45 +237,9 @@ UViewModelService* UMalogicUIManager::FindViewModelService(FName ServiceName) co
 	return ViewModelManager ? ViewModelManager->FindService(ServiceName) : nullptr;
 }
 
-//是否有待定的持久化widget
-bool UMalogicUIManager::HasPendingPersistentWidgets() const
+AMalogicHUD* UMalogicUIManager::GetCurrentHUD() const
 {
-	return PersistentWidgetConfigs.ContainsByPredicate([this](const FMalogicUIWidgetConfig& WidgetConfig)
-	{
-		return !LoggedInvalidWidgetConfigs.Contains(WidgetConfig.WidgetName) && !FindManagedWidget(WidgetConfig.WidgetName);
-	});
-}
-
-void UMalogicUIManager::TryCreateConfiguredWidgets()
-{
-	for (const FMalogicUIWidgetConfig& WidgetConfig : PersistentWidgetConfigs)
-	{
-		TryCreateConfiguredWidget(WidgetConfig);
-	}
-
-	if (!HasPendingPersistentWidgets())
-	{
-		StopWaitingForPrerequisites();
-	}
-}
-
-void UMalogicUIManager::StartWaitingForPrerequisites()
-{
-	TryCreateConfiguredWidgets();
-
-	UWorld* World = GetWorld();
-	if (!World || !HasPendingPersistentWidgets() || PrerequisiteRetryTimer.IsValid())
-	{
-		return;
-	}
-
-	World->GetTimerManager().SetTimer(PrerequisiteRetryTimer, this, &UMalogicUIManager::TryCreateConfiguredWidgets, 0.1f, true);
-}
-
-void UMalogicUIManager::StopWaitingForPrerequisites()
-{
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(PrerequisiteRetryTimer);
-	}
+	const ULocalPlayer* LocalPlayer = GetLocalPlayer();
+	APlayerController* PlayerController = LocalPlayer ? LocalPlayer->GetPlayerController(GetWorld()) : nullptr;
+	return PlayerController ? Cast<AMalogicHUD>(PlayerController->GetHUD()) : nullptr;
 }
