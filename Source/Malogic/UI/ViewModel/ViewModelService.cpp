@@ -2,6 +2,7 @@
 
 #include "UI/ViewModel/ViewModelService.h"
 
+#include "MalogicLogChannels.h"
 #include "MVVMViewModelBase.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(ViewModelService)
@@ -19,9 +20,16 @@ UMVVMViewModelBase* UViewModelService::FindViewModel(FName ViewModelName) const
 {
 	if (const TObjectPtr<UMVVMViewModelBase>* FoundViewModel = ViewModels.Find(ViewModelName))
 	{
-		return IsValid(FoundViewModel->Get()) ? FoundViewModel->Get() : nullptr;
+		if (IsValid(FoundViewModel->Get()))
+		{
+			return FoundViewModel->Get();
+		}
+
+		UE_LOG(LogUI, Warning, TEXT("ViewModel service [%s] has an invalid ViewModel registered under name [%s]."), *GetNameSafe(this), *ViewModelName.ToString());
+		return nullptr;
 	}
 
+	UE_LOG(LogUI, Warning, TEXT("ViewModel service [%s] could not find ViewModel [%s]."), *GetNameSafe(this), *ViewModelName.ToString());
 	return nullptr;
 }
 

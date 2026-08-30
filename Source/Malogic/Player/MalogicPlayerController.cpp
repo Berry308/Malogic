@@ -25,7 +25,7 @@ void AMalogicPlayerController::PreInitializeComponents()
 void AMalogicPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
-
+	
 	SetActorHiddenInGame(false);
 }
 

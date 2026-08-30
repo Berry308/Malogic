@@ -7,6 +7,7 @@
 void UPlayerVMService::InitializeService()
 {
 	Super::InitializeService();
+	ReceiveServiceInitialized();
 }
 
 void UPlayerVMService::DeinitializeService()

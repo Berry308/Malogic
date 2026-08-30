@@ -4,6 +4,7 @@
 
 #include "Engine/LocalPlayer.h"
 #include "GameFramework/PlayerController.h"
+#include "MalogicLogChannels.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(VMLocalPlayerManager)
 
@@ -53,9 +54,16 @@ UViewModelService* UVMLocalPlayerManager::FindService(FName ServiceName) const
 {
 	if (const TObjectPtr<UViewModelService>* FoundService = Services.Find(ServiceName))
 	{
-		return IsValid(FoundService->Get()) ? FoundService->Get() : nullptr;
+		if (IsValid(FoundService->Get()))
+		{
+			return FoundService->Get();
+		}
+
+		UE_LOG(LogUI, Warning, TEXT("Local-player ViewModel manager [%s] has an invalid Service registered under name [%s]."), *GetNameSafe(this), *ServiceName.ToString());
+		return nullptr;
 	}
 
+	UE_LOG(LogUI, Warning, TEXT("Local-player ViewModel manager [%s] could not find Service [%s]."), *GetNameSafe(this), *ServiceName.ToString());
 	return nullptr;
 }
 
@@ -79,29 +87,40 @@ bool UVMLocalPlayerManager::RegisterService(FName ServiceName, UViewModelService
 
 bool UVMLocalPlayerManager::UnregisterService(FName ServiceName)
 {
-	TObjectPtr<UViewModelService>* Service = Services.Find(ServiceName);
-	if (!Service)
+	TObjectPtr<UViewModelService> Service = nullptr;
+	if (!Services.RemoveAndCopyValue(ServiceName, Service))
 	{
 		return false;
 	}
 
-	if (IsValid(Service->Get()))
+	if (IsValid(Service.Get()))
 	{
-		Service->Get()->DeinitializeService();
+		Service->DeinitializeService();
 	}
 
-	Services.Remove(ServiceName);
 	return true;
 }
 
 void UVMLocalPlayerManager::DeinitializeServices()
 {
-	for (auto It = Services.CreateIterator(); It; )
+	// Remove each entry before invoking callbacks so reentrant Lua code cannot invalidate a live map iterator.
+	while (Services.Num() > 0)
 	{
-		if (UViewModelService* Service = It.Value().Get())
+		FName ServiceName;
+		if (const auto It = Services.CreateConstIterator(); It)
+		{
+			ServiceName = It.Key();
+		}
+
+		TObjectPtr<UViewModelService> Service = nullptr;
+		if (!Services.RemoveAndCopyValue(ServiceName, Service))
+		{
+			break;
+		}
+
+		if (IsValid(Service.Get()))
 		{
 			Service->DeinitializeService();
 		}
-		It.RemoveCurrent();
 	}
 }

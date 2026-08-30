@@ -33,6 +33,10 @@ public:
 	APlayerController* GetPlayerController() const { return PlayerController; }
 
 protected:
+	/** Implemented by Lua after the service has been registered and fully initialized. */
+	UFUNCTION(BlueprintImplementableEvent)
+	void ReceiveServiceInitialized();
+
 	/** Implemented by Lua to bind or rebind the supplied controller and its current Pawn. */
 	UFUNCTION(BlueprintImplementableEvent)
 	void ReceivePlayerControllerChanged(APlayerController* NewPlayerController);

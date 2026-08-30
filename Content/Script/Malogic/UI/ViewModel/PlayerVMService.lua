@@ -1,14 +1,24 @@
 local M = UnLua.Class()
 local PlayerStateVMName = "PlayerState"
 
+-- UnLua calls this while the UObject still has RF_NeedInitialization.
 function M:Initialize()
     self.BoundPlayerController = nil
     self.BoundPawn = nil
     self.HealthComponent = nil
     self.MagicComponent = nil
 
-    local ViewModel = UE.NewObject(UE.UVMPlayerState, self)
-    self:RegisterViewModel(PlayerStateVMName, ViewModel)
+    self.PendingPlayerStateViewModel = UE.NewObject(UE.UVMPlayerState, self)
+end
+
+-- Called by C++ after the service has been registered and UObject initialization is complete.
+function M:ReceiveServiceInitialized()
+    local ViewModel = self.PendingPlayerStateViewModel
+    self.PendingPlayerStateViewModel = nil
+
+    if ViewModel then
+        self:RegisterViewModel(PlayerStateVMName, ViewModel)
+    end
 end
 
 function M:Normalize(CurrentValue, MaxValue)
@@ -44,6 +54,7 @@ function M:ReceiveServiceDeinitialized()
     self:UnbindControllerDelegates()
     self:UnbindComponentDelegates()
 
+    self.PendingPlayerStateViewModel = nil
     self.BoundPlayerController = nil
     self.BoundPawn = nil
     self.HealthComponent = nil
@@ -90,7 +101,7 @@ function M:RefreshPawnBindings(PawnOverride)
 
     ViewModel:Reset()
 
-    local Pawn = PawnOverride or PlayerController:GetPawn()
+    local Pawn = PawnOverride or PlayerController:K2_GetPawn()
     self.BoundPawn = Pawn
     if not Pawn then
         return

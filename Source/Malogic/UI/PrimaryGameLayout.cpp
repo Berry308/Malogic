@@ -33,6 +33,7 @@ void UPrimaryGameLayout::UpdateCurrentTopWidget()
 
 bool UPrimaryGameLayout::PushWidgetToLayer(EWidgetLayer WidgetLayer, UActivatableWidget* Widget)
 {
+	UE_LOG(LogUI, Log, TEXT("PrimaryGameLayout [%s] pushing widget [%s] to layer [%d]."), *GetNameSafe(this), *GetNameSafe(Widget), static_cast<uint8>(WidgetLayer));
 	UActivatableWidgetStack* Stack = nullptr;
 	switch (WidgetLayer)
 	{
