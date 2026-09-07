@@ -5,12 +5,16 @@
 伤害UI会根据此次是否发生元素反应而使用不同的UI
 伤害UI的叠加应该怎么做？（第一阶段可以先不实现，提供两种显示方式）
 
-# 人工梳理工程思路
-+ 定义Message系统和Message结构体（仿Lyra）
-+ 在某处触发GCN
-+ 在GCN的OnExecute_Implementation中构建Message结构体（包括伤害数值、伤害坐标、伤害类型（GameplayTag）、伤害的发起者、消息频道的GameplayTag等），最后通过MessageSubsystem广播
-+ 在UIManager中监听玩家造成的伤害消息事件并绑定回调函数
-+ 在回调函数中，根据传入的Message，进行世界空间坐标到屏幕空间坐标的转换，并创建Widget添加到指定Widget队列（新建类）中
+# 人工梳理工程步骤思路
+第一阶段：不使用伤害合并UI
++ 定义Message系统（仿Lyra）
++ 新增BattleMessage.h文件,在其中定义伤害Message载荷结构体：FGameplayDamageMessage（包括伤害数值、伤害坐标、伤害类型（GameplayTag）、伤害的发起者、消息频道的GameplayTag等）
++ 定义UGCN_DamageExecuted类，在GCN的OnExecute_Implementation中创建FGameplayDamageMessage实例，并最后通过MessageSubsystem广播
++ 在MalogicDamageExecution类中，根据最终的GameplayTag触发GCN
++ 在UIManager中监听Message系统的对应频道，并绑定回调函数
++ 在回调函数中，根据传入的Message，进行世界空间坐标到屏幕空间坐标的转换，添加随机偏移，并创建Widget添加到指定Widget队列（ActivatableQueue）中
++ 新建ActivatableQueue，该类不像ActivatableStack那样自动控制显隐，它只影响显示层级关系，先进后出。
+
 
 ## 何时触发GCN
 ### 方案一：在GE中配置GCN自动触发
@@ -192,6 +196,8 @@ Layer 需要保存活动条目，例如 Widget、生成时间、目标弱引用�
 ```
 
 在很短的时间窗口内，将相同 Key 的伤害累加到同一个 Popup，并刷新该 Popup 的动画。合并必须有上限和超时，避免持续伤害永远不消失。不同伤害类型或元素反应不应无条件合并，否则会丢失表现语义。
+
+TMap<TWeakObjectPtr<AActor>, TMap<FName, UDamageWidget*>> ActiveDamageMap;
 
 推荐可配置项：
 

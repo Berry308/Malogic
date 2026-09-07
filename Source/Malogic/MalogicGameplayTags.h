@@ -40,6 +40,9 @@ namespace MalogicGameplayTags
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_Reset);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayEvent_RequestReset);
 
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(GameplayCue_UI_Damage);
+	UE_DECLARE_GAMEPLAY_TAG_EXTERN(Message_Combat_Damage);
+
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MagicCircle_Ability_BuildFinished);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MagicCircle_Ability_Activate);
 	UE_DECLARE_GAMEPLAY_TAG_EXTERN(MagicCircle_Ability_TargetDetected);
